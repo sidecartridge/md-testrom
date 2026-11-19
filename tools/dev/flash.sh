@@ -15,8 +15,7 @@
 # Environment: APP_UUID_KEY (default: the development UUID), OPENOCD and
 # PICO_OPENOCD_PATH (see swd.py), RELEASE_DATE (default: the date of the HEAD
 # commit, so builds of one commit are byte-identical), RP_CMAKE_BUILD_TYPE for
-# a CMake type other than rp/build.sh's (Debug, as rp/build.sh configures
-# every build today).
+# a CMake type other than rp/build.sh's (Release).
 set -Eeo pipefail
 trap 'echo "ERROR: ${BASH_SOURCE[0]}: failed at line ${LINENO}" >&2' ERR
 
@@ -62,13 +61,14 @@ mkdir -p "$OUT" "$HERE/builds/elf"
 # Same environment as rp/build.sh, without its submodule checkout: this script
 # is for fast iteration and the pins are only verified, never changed.
 # The pins are rp/build.sh's; keep the two lists the same.
-for pin in "pico-sdk tags/2.1.1" "pico-extras tags/sdk-2.1.1"; do
+for pin in "pico-sdk tags/2.2.0" "pico-extras tags/sdk-2.2.0" "fatfs-sdk tags/v3.6.2"; do
   set -- $pin
   if [ "$(git -C "$REPO/$1" rev-parse HEAD)" != "$(git -C "$REPO/$1" rev-parse "$2^{commit}")" ]; then
     echo "WARNING: $1 is not at $2; run rp/build.sh once to pin it" >&2
   fi
 done
-export PICO_SDK_PATH="$REPO/pico-sdk" PICO_EXTRAS_PATH="$REPO/pico-extras"
+export PICO_SDK_PATH="$REPO/pico-sdk" PICO_EXTRAS_PATH="$REPO/pico-extras" \
+       FATFS_SDK_PATH="$REPO/fatfs-sdk"
 export BOARD_TYPE=pico_w PICO_BOARD=pico_w
 export APP_UUID_KEY="${APP_UUID_KEY:-44444444-4444-4444-8444-444444444444}"
 RELEASE_VERSION="$(tr -d '\r\n ' < "$REPO/version.txt")"
@@ -79,12 +79,12 @@ fi
 export RELEASE_DATE
 
 echo "Building $NAME from $SRC"
-# Same CMake build type as rp/build.sh: Debug (it configures every build that
-# way), unless RP_CMAKE_BUILD_TYPE says otherwise.
+# Same CMake build type as rp/build.sh: Release, unless RP_CMAKE_BUILD_TYPE
+# says otherwise (MinSizeRel to compare, Debug to step through the code).
 if [ -n "${RP_CMAKE_BUILD_TYPE:-}" ]; then
   echo "WARNING: RP_CMAKE_BUILD_TYPE=$RP_CMAKE_BUILD_TYPE: not a shipping build"
 fi
-cmake -S "$SRC" -B "$OUT" -DCMAKE_BUILD_TYPE="${RP_CMAKE_BUILD_TYPE:-Debug}" \
+cmake -S "$SRC" -B "$OUT" -DCMAKE_BUILD_TYPE="${RP_CMAKE_BUILD_TYPE:-Release}" \
   > "$OUT/cmake.log" 2>&1 \
   || { tail -20 "$OUT/cmake.log"; exit 1; }
 make -C "$OUT" -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)" > "$OUT/make.log" 2>&1 \

@@ -1,8 +1,8 @@
 /**
  * File: blink.h
  * Author: Diego Parrilla Santamaría
- * Date: November 2024
- * Copyright: 2024 - GOODDATA LABS SL
+ * Date: November 2024, February 2026
+ * Copyright: 2024-2026 - GOODDATA LABS SL
  * Description: Header file for the blinking functions
  */
 
@@ -15,19 +15,11 @@
 #include "pico/stdlib.h"
 
 #ifdef CYW43_WL_GPIO_LED_PIN
+#include "network.h"
 #include "pico/cyw43_arch.h"
 #endif
 
-// Morse code
-#define DOT_DURATION_MS 150
-#define DASH_DURATION_MS 450
-#define SYMBOL_GAP_MS 150
 #define CHARACTER_GAP_MS 700
-
-typedef struct {
-  char character;
-  const char *morse;
-} MorseCode;
 
 /**
  * @brief   Blinks an LED to represent a given character in Morse code.
@@ -43,16 +35,6 @@ typedef struct {
  *
  * @return  void
  */
-void blink_morse(char ch);
-
-/**
- * @brief Flashes the letter 'E' in Morse code to indicate an error.
- *
- * This function enters an infinite loop where it continuously flashes the
- * letter 'E' in Morse code.
- */
-void blink_error();
-
 /**
  * @brief Turns off the LED.
  *

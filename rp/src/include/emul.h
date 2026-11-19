@@ -1,9 +1,10 @@
 /**
  * File: emul.h
  * Author: Diego Parrilla Santamaría
- * Date: January 20205
- * Copyright: 2025 - GOODDATA LABS SL
- * Description: Header for the ROM emulator core and setup features
+ * Date: January 2025, November 2026
+ * Copyright: 2025-2026 - GOODDATA LABS SL
+ * Description: The Multidevice Test's application: serve the test window and
+ *              listen for the ST's commands, with no screen of its own.
  */
 
 #ifndef EMUL_H
@@ -22,16 +23,34 @@
 #include "romemul.h"
 #include "select.h"
 
-#define SLEEP_LOOP_MS 100
+// App commands that tools/dev/swd.py sends over SWD on debug builds
+// (`swd.py app <name> [words]`): the name after DEVHOOKS_APP_ is the one the
+// tool takes.
+
+// heap_hold N: hold N KB more of heap (0 releases everything held), to test
+// running out of it.
+#define DEVHOOKS_APP_HEAP_HOLD 1
+
+// health N: run health.c's test N (health_test_t): a hang, a panic, a hard
+// fault or a stack overflow, to check the reboot reason recorded for each.
+#define DEVHOOKS_APP_HEALTH 4
 
 /**
- * @brief
+ * @brief The application: never returns.
  *
- * Launches the ROM emulator application. Initializes terminal interfaces,
- * configures network and storage systems, and loads the ROM data from SD or
- * network sources. Manages the main loop which includes firmware bypass,
- * user interaction and potential system resets.
+ * Copies the test image into the cartridge window and serves both banks
+ * (ROM4 at $FA0000, ROM3 at $FB0000) to the ST, captures the ST's ROM3 reads
+ * for the command channel, and watches SELECT. A short press leaves for
+ * Booster; a press held for SELECT_LONG_RESET is a factory reset.
  */
 void emul_start();
+
+/**
+ * @brief What a short SELECT press does: the main loop leaves for Booster.
+ *
+ * select.c calls it on the device; EmuMD's bench, which has no SELECT
+ * button, calls it when its press file appears (emu/standins.c).
+ */
+void emul_selectShortPress(void);
 
 #endif  // EMUL_H

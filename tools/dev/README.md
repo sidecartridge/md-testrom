@@ -20,8 +20,10 @@ to their source as this firmware allows, so a fix travels both ways with a plain
 
 | File | Source | Commit |
 | --- | --- | --- |
-| `console.py`, `flash.sh`, `swd.py`, `stackdepth.py`, `measure_builds.sh`, `tools_harness.py`, `select_harness.py`, `power_cycles.py`, `gdb/`, this README's sections from "Firmware support" on | md-rom-emulator (the template's tools, adapted there to a 128 KB two-bank window) | `3cd573d` |
+| `console.py`, `flash.sh`, `swd.py`, `stackdepth.py`, `measure_builds.sh`, `tools_harness.py`, `select_harness.py`, `gdb/`, this README's sections from "Firmware support" on | md-rom-emulator (the template's tools, adapted there to a 128 KB two-bank window) | `3cd573d` |
 | `build_hatari_fork.sh`, `hatari_fork.cmake`, `mdfw.sh`, `emu_harness.py` | md-printer-emulator | `e81bcbc` |
+| `make_floppy.sh` | md-printer-emulator | `687affb` |
+| `emu_check.py` | this repository | |
 | `make_floppy_image.py` | md-drives-emulator | `002fbc8` |
 | `../../rp/src/build_id.cmake` | md-rom-emulator | `3cd573d` |
 
@@ -35,18 +37,18 @@ What differs here:
 
 - **The firmware is headless.** It draws nothing and puts no code on the ST, so `swd.py screen`,
   `text`, `key`, `type` and `st-reset` say they do not apply and exit 1.
-- **No command channel yet.** `swd.py counters`, `ring`, `inject` and `app` stop on the symbols
-  the firmware lacks; they work once the firmware is re-founded on the template's command path.
+- **The command channel runs, but nothing sends commands yet.** `swd.py counters` and `ring`
+  show what the capture and the parser made of the ST's ROM3 reads (test data, so far);
+  `inject` and `app` (`heap_hold`, `health`) work on debug builds.
 - **`swd.py window FILE`** checks only the cartridge window by default (this firmware does not use
   `ROM_TEMP`; `--flash` checks it too), and says how many bytes differ.
 - **`select_harness.py`**: the firmware has no setup menu. "Running" means the RP's VTOR holds
   this ELF's vector table; a short press must make the RP leave for Booster, which ends the probe
   session.
-- **`power_cycles.py`**: the ST says nothing to this firmware, so a boot counts when the main
-  loop's first console line follows the banner; whether the ST reached the desktop is for the
-  person at the machine.
-- **`flash.sh`** checks this repository's pins (pico-sdk 2.1.1, pico-extras sdk-2.1.1) and uses
-  the CMake type `rp/build.sh` uses (Debug, for every build).
+- **No `power_cycles.py`**: the sibling's tool asked for the ST to be power-cycled, which wears a
+  machine this old; a boot of the RP alone goes through `swd.py reset` or SELECT.
+- **`flash.sh`** is the sibling's, without its HTTPS profile: pins pico-sdk 2.2.0, pico-extras
+  sdk-2.2.0 and fatfs-sdk v3.6.2, CMake Release for both types.
 - **OpenOCD**: set `OPENOCD` to the Raspberry Pi fork's build
   (`../pico/openocd/src/openocd`). An older `openocd` earlier on `PATH` fails with
   `flash driver 'rp2xxx' not found`.
@@ -58,6 +60,8 @@ What differs here:
    Booster).
 2. `python3 tools/dev/console.py watch` in the background.
 3. `tools/dev/flash.sh debug --probe` (or `release`): builds, flashes, verifies, reads the build ID.
+   Only with the ST idle at the desktop: a flash while a program reads the cartridge crashes the
+   ST (four bombs), even with the bus buffers forced inactive first.
 4. `python3 tools/dev/swd.py window target/atarist/TESTROM.BIN`, `heap`, `stack paint|peak`,
    `crash`.
 5. A step that ends in Booster (`select_harness.py short`) ends the session. Never probe Booster.
@@ -74,7 +78,7 @@ The Hatari build and EmuTOS live in `tools/dev/builds/emumd-cache/`, not `~/.cac
 other projects share at other EmuMD versions. `tools/dev/mdfw.sh` is EmuMD's `mdfw` with that
 cache. What EmuMD does and does not stand in for, for this firmware:
 
-- ROM4 is a 64 KB array; this firmware's window is 128 KB, so a port must not write past 64 KB.
+- The window is 128 KB, as on the device; ROM4 is served from its first half.
 - An ST read of ROM3 reaches the firmware as a command-ring sample and returns no data: the ROM3
   half of the read tests can only be checked on the device.
 - SELECT, the LED, PIO, DMA and timing are not emulated. Bluetooth is Bluepad32's scripted
@@ -82,14 +86,18 @@ cache. What EmuMD does and does not stand in for, for this firmware:
 - Never give this Hatari a GEMDOS drive (`--harddrive`): it takes the first 1 KB of the
   cartridge. Programs travel on floppy images (`make_floppy_image.py`).
 
-The firmware itself is not built for EmuMD yet; until it is, `mdfw.sh` runs EmuMD's own example:
+The firmware itself (`mdfw.ini`, `emu/`; `emu/README.md` has the details):
 
 ```sh
-cd emu/emumd/examples/hello
-EMUMD_CACHE=$PWD/../../../../tools/dev/builds/emumd-cache ../../tools/mdfw run \
-  --headless --frames 900 --no-user-config --tos ../../../tos/tos104uk.img \
-  --screenshot /tmp/hello.png
+python3 tools/dev/emu_check.py                    # build, boot TOS 1.04 / 1.62 / 2.06, PASS/FAIL
+tools/dev/make_floppy.sh FOLDER disk.st           # a 720 KB floppy; its AUTO\ program runs at boot
+python3 tools/dev/emu_check.py --disk-a disk.st --frames 3000 st-104
 ```
+
+`emu_check.py` passes a setup when the firmware's log shows the test image verified in the
+window and the main loop running, and keeps the log and a screenshot of the last frame in
+`tools/dev/logs/emu/<setup>/`. `emu_harness.py` (md-printer-emulator's, kept as it is) drives a
+setup terminal this firmware does not have; it is for the Atari program's screens.
 
 The sections below are md-rom-emulator's, kept for each tool's options. Where they mention a
 setup menu, a ROM, a catalog or v2.1.2, read them with the differences above.
@@ -338,7 +346,6 @@ report to `logs/` and exits 0 only when every check passes.
 ```bash
 python3 tools/dev/tools_harness.py --build --flash --reset   # every tool above, against the device
 python3 tools/dev/st_harness.py --oversize --long            # the command path, from the ST's side
-python3 tools/dev/power_cycles.py                            # cold boots: menu or GEM? (3 by default)
 python3 tools/dev/download_harness.py                        # real downloads, checked by MD5
 ```
 
@@ -381,9 +388,6 @@ python3 tools/dev/download_harness.py                        # real downloads, c
   devhooks mailbox (`DEVHOOKS_APP_DOWNLOAD`) and reads its state over SWD. It needs the SD card and Wi-Fi. `--url URL` downloads one URL and prints the outcome;
   `--no-wait` starts it and frees the probe for another tool (to run `st_harness.py` during a
   download), and `--status` reads the outcome later.
-- `power_cycles.py` watches the log while you power-cycle the ST. For each boot it prints when the
-  cartridge went live and whether the ST said hello (setup menu) or not (GEM). Keep power cycles
-  few: every other ST boot can come from a reset through the sentinel.
 
 ## Measuring builds
 

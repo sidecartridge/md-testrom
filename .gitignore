@@ -75,3 +75,6 @@ __pycache__/
 # EmuMD: TOS images and the emulated microSD card
 emu/tos/
 emu/sd/
+
+# Copied from version.txt by build.sh
+app/atarist/version.txt

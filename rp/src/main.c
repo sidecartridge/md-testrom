@@ -1,8 +1,8 @@
 /**
  * File: main.c
  * Author: Diego Parrilla Santamaría
- * Date: February 2025
- * Copyright: 2023-25 - GOODDATA LABS SL
+ * Date: February 2025, February 2026
+ * Copyright: 2023-2026 - GOODDATA LABS SL
  * Description: Main file for an app.
  */
 
@@ -11,7 +11,9 @@
 #include "debug.h"
 #include "emul.h"
 #include "gconfig.h"
-#include "hardware/clocks.h"  // ← this is the one that declares set_sys_clock_khz()
+#include "hardware/clocks.h"
+#include "hardware/vreg.h"
+#include "pico/stdlib.h"
 #include "reset.h"
 
 // This is the main.c file for the app or microfirmware. It is the entry point
@@ -62,34 +64,35 @@ int main() {
   const char *currentVoltage = VOLTAGE_VALUES[RP2040_VOLTAGE];
   DPRINTF("Clock frequency: %i KHz\n", currentClockFrequencyKhz);
   DPRINTF("Voltage: %s\n", currentVoltage);
+  DPRINTF("FLASH SPI CLKDIV: %i\n", PICO_FLASH_SPI_CLKDIV);
   DPRINTF("PICO_FLASH_SIZE_BYTES: %i\n", PICO_FLASH_SIZE_BYTES);
 
   // Show information about the flash memory layout
-  unsigned int flashLength = (unsigned int)&_booster_app_flash_start -
-                             (unsigned int)&__flash_binary_start;
-  unsigned int boosterFlashLength = (unsigned int)&_config_flash_start -
-                                    (unsigned int)&_booster_app_flash_start;
-  unsigned int configFlashLength = (unsigned int)&_global_lookup_flash_start -
-                                   (unsigned int)&_config_flash_start;
+  unsigned int flashLength = (unsigned int)(uintptr_t)&_booster_app_flash_start -
+                             (unsigned int)(uintptr_t)&__flash_binary_start;
+  unsigned int boosterFlashLength = (unsigned int)(uintptr_t)&_config_flash_start -
+                                    (unsigned int)(uintptr_t)&_booster_app_flash_start;
+  unsigned int configFlashLength = (unsigned int)(uintptr_t)&_global_lookup_flash_start -
+                                   (unsigned int)(uintptr_t)&_config_flash_start;
   unsigned int globalLookupFlashLength = FLASH_SECTOR_SIZE;
   unsigned int globalConfigFlashLength = FLASH_SECTOR_SIZE;
   unsigned int romInRamLength = ROM_SIZE_BYTES * ROM_BANKS;
   unsigned int romTempLength = ROM_SIZE_BYTES * ROM_BANKS;
 
   DPRINTF("Flash start: 0x%X, length: %u bytes\n",
-          (unsigned int)&__flash_binary_start, flashLength);
+          (unsigned int)(uintptr_t)&__flash_binary_start, flashLength);
   DPRINTF("ROM Temp start: 0x%X, length: %u bytes\n",
-          (unsigned int)&_rom_temp_start, romTempLength);
+          (unsigned int)(uintptr_t)&_rom_temp_start, romTempLength);
   DPRINTF("Booster Flash start: 0x%X, length: %u bytes\n",
-          (unsigned int)&_booster_app_flash_start, boosterFlashLength);
+          (unsigned int)(uintptr_t)&_booster_app_flash_start, boosterFlashLength);
   DPRINTF("Config Flash start: 0x%X, length: %u bytes\n",
-          (unsigned int)&_config_flash_start, configFlashLength);
+          (unsigned int)(uintptr_t)&_config_flash_start, configFlashLength);
   DPRINTF("Global Lookup Flash start: 0x%X, length: %u bytes\n",
-          (unsigned int)&_global_lookup_flash_start, globalLookupFlashLength);
+          (unsigned int)(uintptr_t)&_global_lookup_flash_start, globalLookupFlashLength);
   DPRINTF("Global Config Flash start: 0x%X, length: %u bytes\n",
-          (unsigned int)&_global_config_flash_start, globalConfigFlashLength);
+          (unsigned int)(uintptr_t)&_global_config_flash_start, globalConfigFlashLength);
   DPRINTF("ROM in RAM start: 0x%X, length: %u bytes\n",
-          (unsigned int)&__rom_in_ram_start__, romInRamLength);
+          (unsigned int)(uintptr_t)&__rom_in_ram_start__, romInRamLength);
 
 #endif
 
