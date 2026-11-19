@@ -11,7 +11,9 @@ typedef enum {
   DEVICE_NONE,        /* open bus */
   DEVICE_OTHER,       /* something serves data, not the test header */
   DEVICE_OLD,         /* v0.0.3's Multidevice Test */
-  DEVICE_TEST         /* the test firmware's header */
+  DEVICE_TEST,        /* the test firmware's header */
+  DEVICE_TEST_DAMAGED /* no valid header, but the pattern's words: the test
+                         firmware behind a faulty bus */
 } DeviceKind;
 
 typedef struct {

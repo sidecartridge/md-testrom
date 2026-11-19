@@ -5,7 +5,8 @@
 #ifndef REPORT_H
 #define REPORT_H
 
-/* Save the report; prints the outcome. */
-void report_save(void);
+/* Save the report, its first line after the format the gate's state;
+ * prints the outcome. */
+void report_save(const char *gate);
 
 #endif

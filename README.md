@@ -60,6 +60,15 @@ The program will perform the following tests. It will take several minutes:
 
 A healthy SidecarTridge Multidevice should pass all tests without any errors. If any test fails, it indicates a potential issue with the device, its connection, or the computer itself.
 
+### What the line test cannot check
+
+The line test checks the data lines D0-D15, the address lines A1-A15, the ROM4 and ROM3 select lines and the device's level shifters: a fault in any of them changes the words the Atari reads, and the program names the line. Some signals never change what a read returns, so no read from the Atari can test them:
+
+- **UDS and LDS** (the byte strobes): the device always serves a whole word and the CPU picks the byte.
+- **R/W**: the cartridge port is read-only.
+- **The port's +5 V**, beyond the device working at all.
+- **The SELECT button, the LED, the microSD card and the radio**: the device tests check these once the line test passes.
+
 ## Return to the Booster Configurator
 
 To return to the Booster Configurator, press the **`SELECT`** button on your SidecarTridge Multi-device. This will exit the test program and bring you back to the main menu of the Booster Configurator.

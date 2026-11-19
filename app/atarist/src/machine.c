@@ -47,8 +47,9 @@ void machine_identify(Machine *m) {
   m->msteCache = 0;
   if (machine_isMegaSte(m)) {
     unsigned char reg = MSTE_SPEED_CACHE;
-    m->msteFast = reg & 1;
-    m->msteCache = (reg >> 1) & 1;
+    /* Bit 0 the cache, bit 1 the 16 MHz clock. */
+    m->msteCache = reg & 1;
+    m->msteFast = (reg >> 1) & 1;
   }
 }
 

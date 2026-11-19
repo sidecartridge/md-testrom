@@ -50,6 +50,11 @@
 #define T_FOUND_COMMANDS "WARN  The device was left in command mode."
 #define T_FOUND_COMMANDS_DETAIL "  window state %u: a previous run did not finish"
 #define T_FOUND_OK "PASS  The test microfirmware answers."
+#define T_DEVICE_DAMAGED "Device:  test firmware, header unreadable"
+#define T_FOUND_DAMAGED "FAIL  The window reads with errors."
+#define T_FOUND_DAMAGED_DETAIL "  the test pattern, but not its header"
+#define T_FOUND_RUN_LINE "Run the line test to find the faulty line."
+#define T_FOUND_NONE_LINE "The line test can tell what does not answer."
 
 #define T_MENU_LINE "[L] Line test: address, data, select"
 #define T_MENU_LINE_OFF "[ ] Line test: needs the test firmware"
@@ -59,7 +64,82 @@
 #define T_MENU_QUIT "[Q] Quit"
 #define T_MENU_PROMPT "Press a key."
 
-#define T_LINE_SKIP "SKIP  The line test is not in this build."
+#define T_LINE_TITLE "Line test: address, data and selects"
+#define T_LINE_QUICK "Quick pass: about %lu s. Any key stops it."
+#define T_LINE_LONG "Long pass: about %lu min. Any key stops it."
+#define T_LINE_MSTE "Mega STE at %s MHz, cache %s:"
+#define T_LINE_ROW "%-16s %s %s %3lu.%lu s"
+#define T_LINE_ROW_ERRORS "%-16s %s FAIL %lu errors"
+#define T_LINE_ROW_NOTIME "%-16s %s PASS"
+#define T_LINE_ROW_STOPPED "%-16s %s stopped"
+#define T_BANK_ROM4 "ROM4"
+#define T_BANK_ROM3 "ROM3"
+#define T_BOTH_BANKS "both banks"
+
+#define T_TEST_SEQ_WORDS "Words in order"
+#define T_TEST_SEQ_BYTES "Bytes in order"
+#define T_TEST_RANDOM_WORDS "Random words"
+#define T_TEST_RANDOM_BYTES "Random bytes"
+#define T_TEST_ADDRESS_WALK "Address lines"
+#define T_TEST_SAME_ADDRESS "Same address"
+#define T_TEST_FAR_ADDRESSES "Far addresses"
+#define T_TEST_AFTER_RAM "After RAM write"
+#define T_TEST_IRQ_OFF "Interrupts off"
+
+#define T_FIND_BANK "%s:"
+#define T_FIND_NO_ANSWER "FAIL  %s does not answer."
+#define T_FIND_NO_ANSWER_DETAIL "  every read is open bus ($FFFF or $0000)"
+#define T_FIND_NO_ANSWER_ADVICE \
+  "Check the !%s select line (GPIO %d) and the connector."
+#define T_FIND_NONE_AT_ALL "FAIL  The device does not answer at all."
+#define T_FIND_NONE_AT_ALL_ADVICE \
+  "Check the device is fully in the port and the test microfirmware runs."
+#define T_FIND_DATA_LOW "FAIL  Data line D%d is stuck low."
+#define T_FIND_DATA_HIGH "FAIL  Data line D%d is stuck high."
+#define T_FIND_DATA_DETAIL "  GPIO %d, %lu errors in %lu reads"
+#define T_FIND_DATA_ADVICE \
+  "Check D%d's level shifter and its pin on the cartridge connector."
+#define T_FIND_DATA_PAIR "FAIL  Data lines D%d and D%d are shorted."
+#define T_FIND_PAIR_ADVICE "Look for a solder bridge between the two lines."
+#define T_FIND_ADDR_LOW "FAIL  Address line A%d is stuck low."
+#define T_FIND_ADDR_HIGH "FAIL  Address line A%d is stuck high."
+#define T_FIND_ADDR_DETAIL \
+  "  GPIO %d: reads return another address's data"
+#define T_FIND_ADDR_ADVICE \
+  "Check A%d's level shifter and its pin on the cartridge connector."
+#define T_FIND_ADDR_TIED "FAIL  Address lines A%d and A%d are shorted."
+#define T_FIND_BANK_SWAP "FAIL  ROM3 and ROM4 are mixed up."
+#define T_FIND_BANK_SWAP_ADVICE \
+  "Check the !ROM3 and !ROM4 select lines (GPIO 26 and 22)."
+#define T_FIND_PIN_DEAD "FAIL  The Pico's pin GPIO %d is dead."
+#define T_FIND_PIN_DETAIL "  it carries D%d and A%d, and both fail"
+#define T_FIND_PIN_ADVICE \
+  "Check GPIO %d's solder joint on the Pico and its level shifters."
+#define T_FIND_LANE "FAIL  Only the %s bytes read wrong."
+#define T_FIND_LANE_EVEN "even"
+#define T_FIND_LANE_ODD "odd"
+#define T_FIND_LANE_ADVICE "Check the level shifter of data lines %s."
+#define T_FIND_INTERMITTENT "FAIL  Errors come and go: %lu in %lu reads."
+#define T_FIND_INTERMITTENT_ADVICE \
+  "Try another computer; if they stay, check the connector and shifters."
+#define T_FIND_UNCLASSIFIED "FAIL  The errors fit no single fault."
+#define T_FIND_UNCLASSIFIED_ADVICE "Send the report to support."
+#define T_FIND_UNSTABLE "  the same address gave two values %lu times"
+#define T_FIND_FIRST "  %06lX: expected %04X, read %04X"
+#define T_FIND_FIRST_BYTE "  %06lX: expected %02X, read %02X (byte)"
+
+#define T_GATE_PASS "PASS  Every line answers."
+#define T_GATE_UNLOCKED "The device tests are unlocked."
+#define T_GATE_FAIL "The device tests stay locked until this test passes."
+#define T_GATE_STOPPED "SKIP  The line test was stopped."
+#define T_GATE_OVERRIDE "WARN  Gate overridden (debug build)."
+
+#define T_MENU_LINE_LONG "[K] Line test, long pass"
+#define T_MENU_LINE_MSTE "[M] Line test at 8, 16, 16+cache MHz"
+#define T_MENU_UNLOCKED "    Device tests: unlocked"
+#define T_MENU_OVERRIDE "[O] Override the gate (debug build)"
+#define T_BENCH "Bench mode: the line test in a loop."
+#define T_BENCH_RUN "Run %lu"
 
 #define T_SAVED "Report saved as %s."
 #define T_SAVE_FAILED "WARN  The report could not be saved."
@@ -68,5 +148,9 @@
 #define T_SAVE_NONAME "  no free name REPORT00.TXT to REPORT99.TXT"
 
 #define T_REPORT_FORMAT "MDTEST REPORT 1"
+/* The report's second line, whatever was run: the gate's state. */
+#define T_REPORT_GATE_PASSED "Line test: passed, device tests unlocked."
+#define T_REPORT_GATE_LOCKED "Line test: not passed, device tests locked."
+#define T_REPORT_GATE_OVERRIDDEN "Line test: gate overridden (debug build)."
 
 #endif

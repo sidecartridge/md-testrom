@@ -35,7 +35,9 @@ Steps (--step, or --test NAME for tools/dev/emu_tests/NAME.steps):
 
 A test's lines "@hatari bare", "@monitor mono|vga", "@memsize KB",
 "@layout N" (the program built to read window layout N, to show a version
-mismatch) and "@protect on" (the floppy write-protected) set those options.
+mismatch), "@protect on" (the floppy write-protected) and "@fault KIND A B"
+(the firmware serves the window as that faulty bus would, MDTEST_FAULT_* in
+common/mdtest.h) set those options.
 
 The run folder, tools/dev/logs/emu/<date>-<setup>-<name>/, keeps
 command.txt, hatari.out, the program's lines (screen.txt), shots/ (end.png
@@ -329,7 +331,8 @@ def load_test(name, opts):
         line = line.strip()
         if line.startswith("@"):
             option, _, value = line[1:].partition(" ")
-            if option not in ("hatari", "monitor", "memsize", "layout", "protect"):
+            if option not in ("hatari", "monitor", "memsize", "layout", "protect",
+                              "fault"):
                 raise SystemExit(f"{name}.steps: unknown option {line}")
             opts[option] = value.strip()
         elif line and not line.startswith("#"):
@@ -380,6 +383,8 @@ def run_one(setup, tests, extra_steps, disk, timeout):
     cmd = hatari_command(setup, opts, run_dir, floppy)
     env = dict(os.environ, HOME=str(run_dir / "home"), SDL_VIDEODRIVER="dummy",
                SDL_AUDIODRIVER="dummy")
+    if opts.get("fault"):
+        env["MDTEST_FAULT"] = opts["fault"]
     (run_dir / "command.txt").write_text(shlex.join(cmd) + "\n")
     print(f"emu_harness: {setup} {name}: {run_dir.relative_to(ROOT)}", flush=True)
 
@@ -390,7 +395,9 @@ def run_one(setup, tests, extra_steps, disk, timeout):
     failed = False
     try:
         # The program in the AUTO folder: its title line first.
-        steps = [f"say ^SidecarTridge {SETUPS[setup][4]}"] + steps
+        # A monochrome monitor runs at 71 Hz: as many seconds take more frames.
+        boot = SETUPS[setup][4] * (3 if opts.get("monitor") == "mono" else 2) // 2
+        steps = [f"say ^SidecarTridge {boot}"] + steps
         for step in steps:
             words = shlex.split(step)
             entry = {"step": step}

@@ -27,6 +27,19 @@ static int printable(const char *s) {
   return 1;
 }
 
+/* Sampled words that are the pattern's own: a faulty bus still delivers
+ * many of them (all those its fault does not touch). */
+#define MIN_PATTERN 8
+
+static int patternWords(void) {
+  int matches = 0;
+  for (unsigned int i = 0; i < SAMPLES; i++) {
+    unsigned int index = i * SAMPLE_STEP + 7;
+    if (WINDOW[index] == mdtest_patternWord((uint16_t)index)) matches++;
+  }
+  return matches;
+}
+
 static int servesData(void) {
   unsigned short first[SAMPLES];
   int distinct = 0;
@@ -56,6 +69,10 @@ void device_recognise(Device *d) {
     d->state = h[MDTEST_HDR_STATE];
     text(d->version, &h[MDTEST_HDR_VERSION], MDTEST_HDR_VERSION_WORDS);
     text(d->build, &h[MDTEST_HDR_BUILD], MDTEST_HDR_BUILD_WORDS);
+    return;
+  }
+  if (patternWords() >= MIN_PATTERN) {
+    d->kind = DEVICE_TEST_DAMAGED;
     return;
   }
   if (!servesData()) {

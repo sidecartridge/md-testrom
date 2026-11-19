@@ -29,7 +29,7 @@ static void putFile(const char *line, void *ctx) {
   if (w->error == 0) w->error = writeText(w->handle, line);
 }
 
-void report_save(void) {
+void report_save(const char *gate) {
   char name[16];
   int number;
   /* Fsfirst writes into the DTA; a buffer of the program's own. */
@@ -54,6 +54,7 @@ void report_save(void) {
   if (handle >= 0) {
     Writer w = {(short)handle, 0};
     putFile(T_REPORT_FORMAT, &w);
+    putFile(gate, &w);
     for (int i = 0; i < lines && w.error == 0; i++) {
       console_wrap(console_reportLine(i), REPORT_COLUMNS, putFile, &w);
     }
