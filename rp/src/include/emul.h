@@ -35,6 +35,10 @@
 // fault or a stack overflow, to check the reboot reason recorded for each.
 #define DEVHOOKS_APP_HEALTH 4
 
+// fault KIND A B: refill the window, then serve it as a faulty bus would
+// (MDTEST_FAULT_*, common/mdtest.h); fault 0 serves it whole again.
+#define DEVHOOKS_APP_FAULT 5
+
 /**
  * @brief The application: never returns.
  *

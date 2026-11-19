@@ -29,6 +29,13 @@ int main(void) {
   }
   CHECK_EQ(duplicates, 0);
 
+  // The inverse names every word's index.
+  int inverseErrors = 0;
+  for (unsigned int i = 0; i < MDTEST_WINDOW_WORDS; i++) {
+    if (mdtest_patternIndex(mdtest_patternWord((uint16_t)i)) != i) inverseErrors++;
+  }
+  CHECK_EQ(inverseErrors, 0);
+
   // The first word is zero: never a cartridge magic.
   CHECK_EQ(mdtest_patternWord(0), 0);
 

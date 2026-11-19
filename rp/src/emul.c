@@ -17,9 +17,65 @@
 #include "gconfig.h"
 #include "health.h"
 #include "mdtest.h"
+#include "tprotocol.h"
 
 // Included in this file only: it holds the definitions.
 #include "devhooks.h"  // Debug-only SWD mailbox
+
+// The window, as the engine serves it.
+static uint16_t *window;
+
+// The last line-test verdict the ST sent, for the bench (swd.py reads it by
+// symbol); the sequence number tells a new one from the last.
+typedef struct {
+  uint16_t words[MDTEST_VERDICT_WORDS];
+  uint32_t count;
+} LineVerdict;
+volatile LineVerdict lineVerdict;
+// Frames seen while ROM3 is data, and those with a bad checksum.
+volatile uint32_t dataStateFrames;
+volatile uint32_t dataStateChecksumErrors;
+
+// While ROM3 is test data, frames are parsed but never answered: the
+// template's dispatcher writes its answer into the window, over the data
+// under test. The parser is fed by this loop alone until the command channel
+// is selected, so it is never fed two streams.
+static void onDataStateFrame(const TransmissionProtocol *frame) {
+  dataStateFrames++;
+  if (frame->command_id != MDTEST_CMD_LINE_VERDICT ||
+      frame->payload_size < 4U + 2U * MDTEST_VERDICT_WORDS) {
+    return;
+  }
+  const uint16_t *words = (const uint16_t *)frame->payload + 2;  // the token
+  for (unsigned int i = 0; i < MDTEST_VERDICT_WORDS; i++) {
+    lineVerdict.words[i] = words[i];
+  }
+  lineVerdict.count++;
+  DPRINTF("Line test verdict %u: class %u, first $%04X%04X, errors %u, run %u\n",
+          words[0], words[1], words[2], words[3], words[4], words[5]);
+}
+
+static void onDataStateChecksumError(const TransmissionProtocol *frame) {
+  (void)frame;
+  dataStateChecksumErrors++;
+}
+
+static void consumeDataStateSample(uint16_t sample) {
+  tprotocol_parse((uint16_t)(sample ^ CHANDLER_ADDRESS_HIGH_BIT),
+                  onDataStateFrame, onDataStateChecksumError);
+}
+
+#if (defined(_DEBUG) && (_DEBUG != 0)) || (defined(EMUMD) && EMUMD)
+// Serve the window as a faulty bus would (debug builds, and EmuMD's bench).
+static void serveFault(unsigned int kind, unsigned int a, unsigned int b) {
+  mdtest_fillWindow(window, RELEASE_VERSION, RELEASE_BUILD_ID);
+  if (mdtest_injectFault(window, kind, a, b) == 0) {
+    DPRINTF("Serving fault %u (%u, %u)\n", kind, a, b);
+  } else {
+    DPRINTF("Fault %u (%u, %u) refused: window served whole\n", kind, a, b);
+  }
+}
+#endif
 
 // Set by a short SELECT press, handled by the main loop.
 static volatile bool leaveForBooster = false;
@@ -71,6 +127,10 @@ static uint32_t emul_devhooksApp(uint16_t commandId, const uint16_t *payload,
               (block != NULL) ? "ok" : "refused");
       return (block != NULL) ? 1U : 0U;
     }
+    case DEVHOOKS_APP_FAULT:
+      if (payloadSize < 6U) return 0;
+      serveFault(payload[0], payload[1], payload[2]);
+      return 1;
     case DEVHOOKS_APP_HEALTH:
       if (payloadSize < 2U || payload[0] == HEALTH_TEST_NONE ||
           payload[0] > HEALTH_TEST_STACK_OVERFLOW) {
@@ -103,7 +163,7 @@ void emul_start() {
   // Written after chandler_init(), which seeds its random token and seed in
   // the window (at $FA2004): until the ST selects ROM3 as the command
   // channel, every word of the window but the header is test data.
-  uint16_t *window = (uint16_t *)&__rom_in_ram_start__;
+  window = (uint16_t *)&__rom_in_ram_start__;
   mdtest_fillWindow(window, RELEASE_VERSION, RELEASE_BUILD_ID);
 #if defined(_DEBUG) && (_DEBUG != 0)
   {
@@ -118,6 +178,18 @@ void emul_start() {
     } else {
       DPRINTF("Test image in RAM verified (%u words)\n",
               (unsigned)MDTEST_WINDOW_WORDS);
+    }
+  }
+#endif
+
+#if defined(EMUMD) && EMUMD
+  // EmuMD's bench: MDTEST_FAULT="KIND A B" in Hatari's environment serves a
+  // faulty bus from boot (after the check above, which expects it whole).
+  {
+    const char *fault = getenv("MDTEST_FAULT");
+    unsigned int kind = 0, a = 0, b = 0;
+    if (fault && sscanf(fault, "%u %u %u", &kind, &a, &b) >= 1) {
+      serveFault(kind, a, b);
     }
   }
 #endif
@@ -149,9 +221,9 @@ void emul_start() {
     health_setPhase(HEALTH_PHASE_MAIN_LOOP);
     devhooks_poll();
     select_poll();
-    // Drain the ROM3 command ring and dispatch on every pass: the ST spins
-    // on its answer, so the loop never waits.
-    chandler_loop();
+    // Drain the ROM3 capture on every pass. ROM3 is test data: frames are
+    // parsed, never answered (onDataStateFrame()).
+    commemul_poll(consumeDataStateSample);
     // Heap sampling, the debug summary and the debug test hooks
     health_tick();
   }

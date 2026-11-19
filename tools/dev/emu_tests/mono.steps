@@ -1,5 +1,5 @@
-# A monochrome monitor: TOS boots in high resolution, 80 columns.
+# A monochrome monitor: TOS boots in high resolution (TT high on a TT).
 @monitor mono
-say "^  high resolution" 100
+say "^  (high resolution|TT high)" 100
 say "^PASS  The test microfirmware answers" 100
 shot mono

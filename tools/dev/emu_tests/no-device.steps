@@ -2,5 +2,7 @@
 @hatari bare
 say "^Device:  none found" 100
 say "^FAIL  No Multi-device answers in the cartridge port" 100
-say "^\[ \] Line test: needs the test firmware" 100
+say "^The line test can tell what does not answer" 100
+key l
+say "^FAIL  The device does not answer at all" 12000
 nosay "^PASS"

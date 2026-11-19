@@ -59,6 +59,48 @@
 #define MDTEST_RESULT_BUFFER_INDEX (0x4000U / 2U)  // $FA4000
 #define MDTEST_RESULT_BUFFER_WORDS (0x1000U / 2U)  // 4 KB
 
+// The ST's frames on ROM3, in the template's protocol (header $ABCD, the
+// command, the payload size in bytes, a 4-byte token, the payload, the
+// checksum). While ROM3 is test data the firmware answers none of them: an
+// answer is written into the window, which would corrupt the data under test.
+#define MDTEST_APP_ID 0x0DU
+// One way, at the end of every line test: words verdict, class, the first
+// error's address (high word, low word), the error count (saturated at
+// $FFFF), the run's sequence number.
+#define MDTEST_CMD_LINE_VERDICT ((MDTEST_APP_ID << 8) | 0x01U)
+#define MDTEST_VERDICT_WORDS 6U
+#define MDTEST_VERDICT_PASS 0U
+#define MDTEST_VERDICT_FAIL 1U
+#define MDTEST_VERDICT_STOPPED 2U
+// The verdict's class: what the line test's errors point to
+// (app/atarist/src/diagnose.h says what each one means).
+#define MDTEST_CLASS_NONE 0U
+#define MDTEST_CLASS_NO_ANSWER 1U
+#define MDTEST_CLASS_DATA_LOW 2U
+#define MDTEST_CLASS_DATA_HIGH 3U
+#define MDTEST_CLASS_DATA_PAIR 4U
+#define MDTEST_CLASS_ADDR_LOW 5U
+#define MDTEST_CLASS_ADDR_HIGH 6U
+#define MDTEST_CLASS_ADDR_TIED 7U
+#define MDTEST_CLASS_BANK_SWAP 8U
+#define MDTEST_CLASS_PIN_DEAD 9U
+#define MDTEST_CLASS_LANE 10U
+#define MDTEST_CLASS_INTERMITTENT 11U
+#define MDTEST_CLASS_UNCLASSIFIED 12U
+
+// Faults a debug firmware serves on request, to check the line test names
+// them (mdtest_injectFault()). Lines are window index bits: 0 to 14 are
+// A1 to A15, 15 is the bank (the !ROM4 and !ROM3 selects).
+#define MDTEST_FAULT_NONE 0U
+#define MDTEST_FAULT_DATA_LOW 1U      // data bit a always 0
+#define MDTEST_FAULT_DATA_HIGH 2U     // data bit a always 1
+#define MDTEST_FAULT_DATA_SWAP 3U     // data bits a and b swapped
+#define MDTEST_FAULT_ADDR_LOW 4U      // address line a always 0
+#define MDTEST_FAULT_ADDR_TIED 5U     // address line b follows line a
+#define MDTEST_FAULT_SCATTER 6U       // one word in a wrong, one bit each
+#define MDTEST_FAULT_ROM3_IS_ROM4 7U  // ROM3 serves ROM4's words
+#define MDTEST_FAULT_PIN_DEAD 8U      // GPIO of data bit a / line a: both low
+
 /**
  * @brief The test pattern's word at a window index.
  *
@@ -78,6 +120,26 @@ static inline uint16_t mdtest_patternWord(uint16_t index) {
 }
 
 /**
+ * @brief The window index whose pattern word is this word: the inverse of
+ *        mdtest_patternWord(). A word read from the wrong address names the
+ *        address it came from.
+ */
+static inline uint16_t mdtest_patternIndex(uint16_t word) {
+  // Undo each step in reverse: a right xorshift by k is undone by repeating
+  // it until every bit is restored; a product by its inverse modulo 2^16.
+  uint16_t value = word;
+  uint16_t undone = value;
+  for (int i = 0; i < 2; i++) undone = (uint16_t)(value ^ (undone >> 8));
+  value = (uint16_t)(undone * 0x7787U);  // 0x9E37^-1
+  undone = value;
+  for (int i = 0; i < 3; i++) undone = (uint16_t)(value ^ (undone >> 7));
+  value = (uint16_t)(undone * 0xC585U);  // 0x6B4D^-1
+  undone = value;
+  for (int i = 0; i < 2; i++) undone = (uint16_t)(value ^ (undone >> 8));
+  return undone;
+}
+
+/**
  * @brief Write the whole window: the pattern, then the header.
  *
  * @param window MDTEST_WINDOW_WORDS words, in the order the ST reads them.
@@ -91,5 +153,15 @@ void mdtest_fillWindow(uint16_t *window, const char *version,
  * @brief Rewrite the header's state word and its checksum.
  */
 void mdtest_setState(uint16_t *window, uint16_t state);
+
+/**
+ * @brief Turn a freshly filled window into what a faulty bus would deliver.
+ *
+ * Acts on the served copy only, never on the engine. kind is one of
+ * MDTEST_FAULT_*; a and b its bit or line numbers (or N for SCATTER).
+ * Returns 0, or -1 for a kind or argument out of range (window unchanged).
+ */
+int mdtest_injectFault(uint16_t *window, unsigned int kind, unsigned int a,
+                       unsigned int b);
 
 #endif  // MDTEST_H

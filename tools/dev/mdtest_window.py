@@ -20,7 +20,7 @@ def layout() -> dict:
             raw[m.group(1)] = m.group(2)
     out = {}
     for name, expr in raw.items():
-        text = re.sub(r"(\d)U\b", r"\1", expr.replace("ul", ""))
+        text = re.sub(r"\b(0x[0-9A-Fa-f]+|\d+)(?:UL|ul|U)\b", r"\1", expr)
         text = re.sub(r"MDTEST_(\w+)", lambda m: str(out.get(m.group(1), m.group(0))), text)
         try:
             out[name] = int(eval(text, {"__builtins__": {}}))

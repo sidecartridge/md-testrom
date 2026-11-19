@@ -14,7 +14,7 @@ There are two deliverables:
 
 The window's layout and the pattern are one plain C header, `common/mdtest.h` (with `common/mdtest.c`), shared by the firmware, the program, the host tests and the tools: never write a window offset anywhere else.
 
-The firmware's app-agnostic modules are the SidecarTridge microfirmware template's (`md-microfirmware-template`), taken through `md-rom-emulator`, which adapted them to a 128 KB two-bank window; see "Divergences from the template". The command channel (ROM3 reads captured and parsed on the RP) is running, but nothing sends commands yet: the program still only reads.
+The firmware's app-agnostic modules are the SidecarTridge microfirmware template's (`md-microfirmware-template`), taken through `md-rom-emulator`, which adapted them to a 128 KB two-bank window; see "Divergences from the template". The command channel (ROM3 reads captured and parsed on the RP) is running; while ROM3 is test data the program sends only its one-way line-test verdict.
 
 ## Build
 
@@ -113,12 +113,27 @@ The Atari sees 128 KB at `$FA0000`–`$FBFFFF`: ROM4 (`$FA0000`, word indexes 0�
 
 ### Atari test program (`app/atarist/src/`)
 `MDTEST.TOS` runs in supervisor mode on its own stack, text only over GEMDOS and BIOS (any resolution, the AUTO folder):
-- `main.c` — the flow: the machine, the device, the menu ([L] line test, [S] save report, [Q] quit).
-- `machine.c` — the cookie jar (`_MCH`, `_CPU`; none on TOS 1.0x: an ST), TOS version and date, GEMDOS, ST and TT RAM, the resolution, a Mega STE's speed and cache.
-- `device.c` — what is in the port, from the header: the test firmware (and its layout version against the program's), v0.0.3's data, another microfirmware, or open bus.
-- `console.c` — every line goes to the screen (word-wrapped at the width Line-A reports), into the report, and through NatFeats to Hatari's console (`MDTEST: <line>`; nothing on a real machine), which the EmuMD harness reads.
-- `report.c` — `REPORTnn.TXT` next to the program: CR LF, 80 columns, `MDTEST REPORT 1` first.
-- `texts.h` — every string the user reads, and the wording rules.
+- `main.c` — the flow: the machine, the device, the menu ([L] quick line test, [K] long pass, [M] on a Mega STE the quick pass at 8, 16 and 16 MHz + cache with the user's setting put back, [S] save report, [Q] quit). The device tests stay locked until a line test passes, for the session; a `make DEBUG=1` build adds [O] to override the gate, and says so. An `MDTEST.BNC` file next to the program starts bench mode: the quick pass in a loop until a key.
+- `linetest.c` — the reads, over a window pointer (so the host tests run the same code): words and bytes in order, random words and bytes, the address-line walk (each of A1–A15 alone high and alone low), the same address back to back, far-apart addresses alternating, reads right after a RAM write, and words in order with interrupts off; on each bank. Quick pass about 26 s on an 8 MHz ST, the long one v0.0.3's million random reads. The expected word is computed on the fly (`mdtest_patternWord()`, about 85 µs a word at 8 MHz), so a 512 KB machine needs no 128 KB buffer.
+- `diagnose.c` — from mismatches to a named fault, per bank: a word read from the wrong address names its source (`mdtest_patternIndex()`), so address lines are told from data lines; then stuck or shorted data lines, a dead RP pin (its data and address line together), a whole bank answering open bus, the banks swapped, one byte lane, errors that come and go, or "fits no single fault" with the raw first errors.
+- `ltscreen.c` — the line test on the screen, the findings with their advice, and the verdict sent to the RP as a one-way frame of ROM3 reads (`MDTEST_CMD_LINE_VERDICT`: verdict, class, first error, error count, run number).
+- `machine.c`, `device.c` (the header, or the pattern behind an unreadable header, v0.0.3's data, another microfirmware, open bus), `console.c` (screen, report, NatFeats), `report.c` (every screen line, after one that states the gate), `texts.h` (every string, and the wording rules).
+
+### What the line test can see
+The RP's GPIO 6–21 carry the port's data lines D0–D15 and, at another moment of each cycle, its address lines A0–A15 through the level shifters (A0 is never driven: the 68000 has no A0 on the bus). So GPIO 6+n is both Dn and An, and window index bit k is A(k+1); index bit 15 is the bank, chosen by the selects.
+
+| Signal | RP pin | Exercised by | A fault reads as |
+| --- | --- | --- | --- |
+| D0–D15 | GPIO 6–21 | every read | one bit always 0 or 1; two bits that follow each other; one byte lane |
+| A1–A15 | GPIO 7–21 | the address walk, and every read | another address's word: the pattern names which line |
+| GPIO 6+n dead | — | every read | Dn and An wrong together |
+| !ROM4 | GPIO 22 | every ROM4 read | ROM4 open bus, or ROM3's words |
+| !ROM3 | GPIO 26 | every ROM3 read | ROM3 open bus, or ROM4's words |
+| READ / WRITE shifter enables | GPIO 27 / 28, driven by the RP | every read | no answer at all, or every address wrong |
+
+No read from the ST tests UDS and LDS (the RP does not sample them: every cartridge read is a word, the CPU picks the byte), R/W, the port's +5 V, SELECT (GPIO 5) or the LED and the radio (the device tests). Under EmuMD ROM3 reads return `$FFFF`, so the line test there passes ROM4 and names ROM3 as not answering.
+
+While ROM3 is test data the firmware parses the ROM3 frames without answering them (`emul.c`): the template's dispatcher writes every answer into the window at `$FA2004`, over the data under test. Debug builds can serve the window as a faulty bus would (`mdtest_injectFault()`: `swd.py app fault KIND A B` on the device, `MDTEST_FAULT="KIND A B"` in Hatari's environment under EmuMD); `tools/dev/bus_faults.py` checks each against the bench loop's verdicts (`swd.py verdict`).
 
 ### Memory layout (`rp/src/memmap_rp.ld`)
 

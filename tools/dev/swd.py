@@ -1252,6 +1252,9 @@ def cmd_ring(args: argparse.Namespace) -> int:
     frames = decode_frames(values, defs["PROTOCOL_HEADER"],
                            defs["MAX_PROTOCOL_PAYLOAD_SIZE"])
     names = command_names(defs)
+    import mdtest_window
+    names.update({v: "MDTEST_" + k for k, v in mdtest_window.layout().items()
+                  if k.startswith("CMD_") and isinstance(v, int)})
     for fr in frames:
         at = f"#{first + fr['pos']}"
         if fr.get("incomplete"):
@@ -1516,6 +1519,32 @@ def cmd_inject(args: argparse.Namespace) -> int:
                   [int(w, 0) for w in args.words])
     print(f"command {args.command_id} injected")
     return 0
+
+
+VERDICTS = {0: "PASS", 1: "FAIL", 2: "STOPPED"}
+
+
+def line_verdict(elf: str) -> dict:
+    """The last line-test verdict the ST sent (emul.c's lineVerdict)."""
+    import mdtest_window
+    words_n = mdtest_window.layout()["VERDICT_WORDS"]
+    address = elf_symbols(elf, "lineVerdict")["lineVerdict"][0]
+    mem = read_memory(address, 2 * words_n + 4)
+    words = list(struct.unpack(f"<{words_n}H", mem[:2 * words_n]))
+    return {"count": struct.unpack("<I", mem[2 * words_n:2 * words_n + 4])[0],
+            "verdict": VERDICTS.get(words[0], str(words[0])), "class": words[1],
+            "first": (words[2] << 16) | words[3], "errors": words[4], "run": words[5]}
+
+
+def cmd_verdict(args: argparse.Namespace) -> int:
+    """The last line-test verdict the ST sent to the RP (bench mode)."""
+    v = line_verdict(matching_elf(args.elf))
+    if not v["count"]:
+        print("no verdict yet")
+        return 3
+    print(f"verdict #{v['count']} (run {v['run']}): {v['verdict']}, class "
+          f"{v['class']}, first ${v['first']:06X}, {v['errors']} errors")
+    return 0 if v["verdict"] == "PASS" else 3
 
 
 def cmd_app(args: argparse.Namespace) -> int:
@@ -1915,6 +1944,11 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("words", nargs="*", help="16-bit payload words")
     ap.add_argument("--elf")
     ap.set_defaults(func=cmd_app)
+
+    vd = sub.add_parser("verdict", help="the last line-test verdict the ST "
+                        "sent (MDTEST.TOS in bench mode)")
+    vd.add_argument("--elf")
+    vd.set_defaults(func=cmd_verdict)
 
     ij = sub.add_parser("inject", help="inject a protocol command")
     ij.add_argument("command_id")

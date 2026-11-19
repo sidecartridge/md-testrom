@@ -20,6 +20,10 @@ CC := m68k-atari-mint-gcc
 # -Wno-unused-value: osbind.h's bindings are expressions with a value.
 CFLAGS := -std=gnu99 -Os -Wall -Werror -Wno-unused-value -I$(LIBCMINI)/include -I$(COMMON) \
           -DVERSION=\"$(VERSION)\" $(EXTRA_CFLAGS)
+# DEBUG=1: the bench's build, with a key that overrides the line test's gate.
+ifeq ($(DEBUG),1)
+CFLAGS += -DMDTEST_DEBUG=1
+endif
 LDFLAGS := -nostdlib -L$(LIBCMINI)/lib -lcmini -lgcc -Wl,--traditional-format -s
 
 SOURCES := $(wildcard $(SRC)/*.c)

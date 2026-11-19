@@ -6,6 +6,7 @@ say "^Device:  test firmware v" 100
 say "^  layout 1, build emumd" 100
 say "^PASS  The test microfirmware answers" 100
 say "^\[L\] Line test" 100
+say "^\[K\] Line test, long pass" 100
 say "^\[S\] Save report" 100
 say "^\[Q\] Quit" 100
 nosay "^FAIL"

@@ -101,7 +101,13 @@ window and the main loop running, and keeps the log and a screenshot of the last
 (`@hatari bare`), on the ST (TOS 1.04, 512 KB), STE, Mega STE, TT and Falcon setups. The program
 prints every line it shows through NatFeats (`MDTEST: <line>` in `hatari.out`); the steps in
 `tools/dev/emu_tests/*.steps` press keys, wait for lines, and check the files it saves on the
-floppy once Hatari has stopped. `--all` runs every test on every setup.
+floppy once Hatari has stopped. `--all` runs every test on every setup. `@fault KIND A B` in a
+test serves the window as that faulty bus would (`MDTEST_FAULT`), to check the line test names it.
+
+On the device, `swd.py verdict` reads the last line-test verdict the ST sent, and
+`bus_faults.py` serves each fault in turn (`swd.py app fault`) while `MDTEST.TOS` runs in bench
+mode (an `MDTEST.BNC` file next to it), and compares the verdict's class with the one expected.
+Flash only with the ST at the desktop, never during the bench loop.
 
 The sections below are md-rom-emulator's, kept for each tool's options. Where they mention a
 setup menu, a ROM, a catalog or v2.1.2, read them with the differences above.
