@@ -1,6 +1,10 @@
 #include "include/aconfig.h"
 
-// We don't have any variables because this is the placeholder app
+// The Multidevice Test keeps no settings of its own: the table is empty, as
+// in v0.0.3, so a device upgraded from it finds the same (empty) app sector.
+// Never remove an entry from this table once one exists, and add new ones only
+// at the end. The loader reads only as many stored entries as there are
+// defaults, so one default fewer silently drops the last setting a user saved.
 static SettingsConfigEntry defaultEntries[] = {};
 
 // Create a global context for our settings
@@ -80,7 +84,7 @@ int aconfig_init(const char *currentAppId) {
   //      next 2 bytes  => sector index
   //    Stop on zero-filled UUID or invalid data or out-of-bounds.
   uint8_t *ptr = lookupStart;
-  uint32_t flashAddress = 0;  // Will remain 0 if we don't find a match
+  uintptr_t flashAddress = 0;  // Will remain 0 if we don't find a match
 
   while ((size_t)(ptr - lookupStart) + ACONFIG_LOOKUP_ENTRY_SIZE <= lookupLen) {
     DPRINTF("Lookup entry at %X is %s\n", ptr, (const char *)ptr);
@@ -106,7 +110,7 @@ int aconfig_init(const char *currentAppId) {
 
       // Convert sector number to actual flash address
       flashAddress =
-          (uint32_t)&_config_flash_start + (sector * FLASH_SECTOR_SIZE);
+          (uintptr_t)&_config_flash_start + (sector * FLASH_SECTOR_SIZE);
       DPRINTF("Configuration flash address found sector:%u addr: 0x%X\n",
               sector, flashAddress);
       break;

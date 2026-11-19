@@ -6,36 +6,37 @@ See also: `README.md` (end-user instructions, test descriptions, blind-mode setu
 
 ## What this repo is
 
-The **Multidevice Test** microfirmware for the SidecarTridge Multi-device (Atari ST / STE / MegaST(E) / TT / Falcon). It is a stripped-down fork of `md-microfirmware-template` (an early 2025 version) that does one thing: serve a fixed 128 KB block of pseudo-random data over the cartridge port so a TOS program on the Atari can read it back and compare it against a copy on disk. It validates the bus connection and the timing of the ROM emulation.
+The **Multidevice Test** microfirmware for the SidecarTridge Multi-device (Atari ST / STE / MegaST(E) / TT / Falcon), and the TOS program that tests the device from the Atari. The firmware serves a fixed 128 KB block of test data over the cartridge port so the program can read it back and compare it; it validates the bus connection and the timing of the ROM emulation. It is headless: it draws nothing and puts no code on the ST, which boots as if no cartridge were there.
 
 There are two deliverables:
-- **The microfirmware** (`dist/<APP_UUID>-<VERSION>.uf2` + `dist/<APP_UUID>.json`), installed through the Booster Configurator, which emulates ROM4 + ROM3 with `target/atarist/TESTROM.BIN`.
+- **The microfirmware** (`dist/<APP_UUID>-<VERSION>.uf2` + `dist/<APP_UUID>.json`), installed through the Booster Configurator, which serves ROM4 + ROM3 with `target/atarist/TESTROM.BIN`.
 - **The Atari test program** `TESTSCRT.TOS` (`app/atarist/`), which the user copies to the Atari together with a `TESTROM.BIN` that must be **byte-identical** to the one embedded in the firmware.
 
-Unlike the template there is no m68k cartridge code, no command channel (ROM3 is plain read-only data here), no terminal/display, no SD card and no networking.
+The firmware's app-agnostic modules are the SidecarTridge microfirmware template's (`md-microfirmware-template`), taken through `md-rom-emulator`, which adapted them to a 128 KB two-bank window; see "Divergences from the template". The command channel (ROM3 reads captured and parsed on the RP) is running, but nothing sends commands yet: the program still only reads.
 
 ## Build
 
 ### Microfirmware
 
 ```bash
-# <board_type> = pico | pico_w
+# <board_type> = pico_w (the only board: the device tests need its radio chip)
 # <build_type> = release | debug
-# <app_uuid_key> = UUID4 identifying this app, must match the app's release UUID
+# <app_uuid_key> = UUID4 identifying this app; the development UUID locally
 ./build.sh pico_w release 44444444-4444-4444-8444-444444444444
 ```
 
 Required host environment:
-- ARM GNU toolchain (CI uses Ubuntu's `gcc-arm-none-eabi`); locally export `PICO_TOOLCHAIN_PATH` if needed.
-- `atarist-toolkit-docker` (`stcmd`) — used by `target/atarist/build.sh`. It runs `docker run -it`, so it needs a TTY; CI strips `-it` from `/usr/local/bin/stcmd` with `sed`.
-- Python 3 (for `firmware.py`) and `md5sum` (on macOS, from coreutils).
+- ARM GNU Toolchain 14.2 (`arm-none-eabi-gcc` on `PATH`, or `PICO_TOOLCHAIN_PATH`), CMake 3.26+, Python 3.
+- Submodules: `pico-sdk` 2.2.0, `pico-extras` sdk-2.2.0, `fatfs-sdk` v3.6.2, `emu/emumd` (EmuMD). `rp/build.sh` initialises and pins the first three.
+- `atarist-toolkit-docker` 1.5.0 (`stcmd`) for the Atari program only. Run it with `STCMD_IMAGE_TAG=1.5.0` (the image, whatever `latest` is) and `STCMD_NO_TTY=1` outside a terminal; CI installs it with the v1.5.0 installer.
 
-Build flow (`build.sh`):
-1. Copies `version.txt` into `rp/`, `target/` and `app/atarist/`.
-2. Deletes and recreates `dist/`.
-3. `target/atarist/build.sh`: copies `TESTROM.BIN` to `dist/FIRMWARE.IMG`, pads it to 128 KB, and `firmware.py` converts it into `rp/src/include/target_firmware.h` (a `uint16_t` array, trailing zero bytes trimmed). **It does not generate the random data** — it embeds whatever `target/atarist/TESTROM.BIN` is committed.
-4. `rp/build.sh`: pins submodules (pico-sdk `2.1.1`, pico-extras `sdk-2.1.1`), wipes `rp/build/`, runs CMake and `make -j4`, writes `rp/dist/rp-<board>[-debug].uf2`.
-5. MD5 of the UF2, rename to `dist/<APP_UUID>-<VERSION>.uf2`, and substitute UUID/MD5/version into `dist/<APP_UUID>.json` from `desc/app.json`.
+Build flow (`build.sh`, every script `set -Eeo pipefail`; a failed step stops the build with `ERROR: <script>: failed at line N`, and `build.sh` empties `dist/` first, so a failed build leaves no UF2 or JSON behind):
+1. Refuses any board but `pico_w`, any build type but `release` / `debug`; copies `version.txt` into `rp/`, `target/` and `app/atarist/`.
+2. `target/atarist/build.sh`: checks `TESTROM.BIN` is exactly 128 KB and does not start with a cartridge magic (`$ABCDEF42`, `$FA52235F`: TOS would run the test data), then `firmware.py` converts it into `rp/src/include/target_firmware.h` (a `uint16_t` array, trailing zero bytes trimmed). **It does not generate the random data** — it embeds whatever `target/atarist/TESTROM.BIN` is committed.
+3. `rp/build.sh`: pins the submodules, wipes `rp/build/` and `rp/dist/`, CMake **Release** for both build types, writes `rp/dist/rp-<board>[-debug].uf2`.
+4. MD5 of the UF2, rename to `dist/<APP_UUID>-<VERSION>.uf2`, and substitute UUID/MD5/version into `dist/<APP_UUID>.json` from `desc/app.json`.
+
+`RELEASE_DATE="YYYY-MM-DD HH:MM:SS"` fixes the date the image carries, so two builds of one commit are byte-identical. `tools/dev/flash.sh <release|debug> --build-only` builds out of tree in `tools/dev/builds/` in seconds, without touching `rp/build` or the submodules.
 
 ### Atari test program (`app/atarist/`)
 
@@ -43,37 +44,37 @@ Build flow (`build.sh`):
 
 ```bash
 cd app/atarist
-ST_WORKING_FOLDER=$PWD stcmd make            # release: regenerates dist/TESTROM.BIN
-ST_WORKING_FOLDER=$PWD stcmd make DEBUG_MODE=1   # debug: uses test/hatarrom.bin, 1,000 iterations
+STCMD_IMAGE_TAG=1.5.0 ST_WORKING_FOLDER=$PWD stcmd make                # release: regenerates dist/TESTROM.BIN
+STCMD_IMAGE_TAG=1.5.0 ST_WORKING_FOLDER=$PWD stcmd make DEBUG_MODE=1   # debug: uses test/hatarrom.bin, 1,000 iterations
 ```
 
 (The README's "run `make` at the repo root" instructions are stale: the root `Makefile` only has `tag`.)
 
 ### Build gotchas
-- **The random data and the firmware must match.** `make` (release) in `app/atarist/` runs `src/generate_random_data.py`, which writes a *new* random `dist/TESTROM.BIN` on every run. That file does not reach the firmware unless it is copied over `target/atarist/TESTROM.BIN` and the firmware rebuilt. Shipping a `TESTSCRT.TOS`/`TESTROM.BIN` pair against a firmware built from a different `TESTROM.BIN` makes every test fail. Never regenerate casually; if you must, update `target/atarist/TESTROM.BIN` in the same change.
-- **Version string.** Bytes 4–14 of `TESTROM.BIN` hold the version string that `testDifferentVersions()` compares with `VERSION` (from `version.txt`, passed as `-DVERSION`). The generator writes the first line of `version.txt` there. The committed `target/atarist/TESTROM.BIN` currently carries `0.0.3` while `version.txt` is `v0.0.3` — verify before relying on that test.
-- **Debug data is different data.** With `DEBUG_MODE` set, the TOS program reads `HATARROM.BIN` (`app/atarist/test/hatarrom.bin`), which differs from `target/atarist/TESTROM.BIN`, so a debug TOS build only passes against a firmware built from `hatarrom.bin`.
-- `rp/build.sh` always configures CMake as `Debug` (`-DCMAKE_BUILD_TYPE=Debug`); `<build_type>` only sets `DEBUG_MODE` (UART stdio + `DPRINTF`) and the UF2 file name.
-- `target/atarist/build.sh` calls `stcmd make` in a directory with no Makefile; that step fails harmlessly. None of the scripts use `set -e`, so read the output: a failed step does not stop the build, and a stale `target_firmware.h` or UF2 can be left behind.
-- `rp/build.sh` runs `git submodule update --init --recursive` and hard-checkouts the pinned tags on every build, and `build.sh` deletes `dist/` — local edits inside `pico-sdk/`/`pico-extras/`, or anything left in `dist/`, are lost.
+- **Both build types are CMake `Release`.** `<build_type>` sets only `DEBUG_MODE` (`DPRINTF`, UART stdio at 921,600 baud, the SWD mailbox) and the UF2's name, so a debug build runs the code that ships. `RP_CMAKE_BUILD_TYPE` overrides the CMake type in `rp/build.sh` and `tools/dev/flash.sh` (with a warning; the build ID then carries it, `+cmakedebug` for Debug).
+- **The released data and program.** The `TESTSCRT.TOS` / `TESTROM.BIN` pair users have comes from the `sidecartridge/atarist-sidecart-test-rom` v0.0.3 release; its `TESTROM.BIN` is byte-identical to `target/atarist/TESTROM.BIN`, and its program expects the version string `0.0.3` that the data carries (bytes 4–14). This repo's own v0.0.3 release has only the UF2 and JSON.
+- **A rebuild of the program does not match the firmware.** `make` (release) in `app/atarist/` runs `src/generate_random_data.py`, which writes a *new* random `dist/TESTROM.BIN` on every run, and the program it builds expects `v0.0.3` (from `version.txt`), not the data's `0.0.3`. Never regenerate casually; if you must, update `target/atarist/TESTROM.BIN` in the same change.
+- **Debug data is different data.** With `DEBUG_MODE` set, the TOS program reads `HATARROM.BIN` (`app/atarist/test/hatarrom.bin`), which differs from `target/atarist/TESTROM.BIN`, so a debug TOS build only passes against a firmware built from `hatarrom.bin` (or with `TESTROM.BIN` copied in as `HATARROM.BIN`).
+- `rp/build.sh` runs `git submodule update --init --recursive` and hard-checkouts the pinned tags on every build, and `build.sh` deletes `dist/` — local edits inside a submodule, or anything left in `dist/`, are lost. The FatFs configuration is `rp/src/ff/ffconf.h`, which shadows the submodule's.
 - Without `APP_UUID_KEY` CMake falls back to the development UUID `44444444-4444-4444-8444-444444444444`.
 
 ### CI / release
-- `.github/workflows/build.yml` builds `pico_w` release on every pull request with the `APP_UUID` secret.
+- `.github/workflows/build.yml` runs the host tests and builds `pico_w` release and debug on every pull request, with the ARM GNU Toolchain 14.2 and toolkit 1.5.0, and the `APP_UUID` secret (the development UUID where it is not available).
 - `.github/workflows/release.yml` triggers on `v*` tags: builds, attaches the UF2 + JSON to the GitHub Release (notes from `CHANGELOG.md` up to the first `---`), uploads them to `s3://atarist.sidecartridge.com/`. It does **not** build or attach `TESTSCRT.TOS` / `TESTROM.BIN`.
 - `make tag` tags HEAD with the contents of `version.txt` and pushes it (triggers the release). Tagging/releasing is the repo owner's call — a change lands as a `version.txt` bump plus a `CHANGELOG.md` entry.
 - `secrets.sh` holds AWS credentials and is gitignored. Never print, commit or copy its contents.
 
 ### Tests / verification
-There is no test suite yet. Two benches, used in this order (`tools/dev/README.md` has the commands):
+Three benches, used in this order (`tools/dev/README.md` has the commands):
 
-1. **EmuMD** (submodule `emu/emumd`): the firmware's own C code built for this computer and run in EmuMD's Hatari with a Multi-device on the cartridge port. Use it first, and for everything it can show. `tools/dev/build_hatari_fork.sh` once (the build and EmuTOS go to `tools/dev/builds/emumd-cache/`), TOS images linked in `emu/tos/` (gitignored), `tools/dev/mdfw.sh` to build and run. Its limits for this firmware: ROM4 is a 64 KB array (this window is 128 KB, so a port must not write past 64 KB), an ST read of ROM3 returns no firmware data (it only feeds the command ring), and there is no PIO, DMA, SELECT, LED, timing or real radio. Never give its Hatari a GEMDOS drive: it takes the first 1 KB of the cartridge. The firmware itself is not ported to EmuMD yet.
-2. **The device**, only for what EmuMD cannot show (the bus and its timing, ROM3 as data, the real card and radios, SELECT, the LED, flash and memory numbers): a Multi-device on an Atari with a Raspberry Pi Debug Probe on SWD and the debug UART. A session starts with the test microfirmware launched from Booster (a firmware flashed while Booster's settings name another app jumps straight back to Booster); then `tools/dev/console.py watch`, `tools/dev/flash.sh debug --probe`, `tools/dev/swd.py window target/atarist/TESTROM.BIN`. Never probe Booster.
+1. **Host tests**: `make -C tests/host test` — the command parser (`tprotocol.c`) under ASan and UBSan, in seconds.
+2. **EmuMD** (submodule `emu/emumd`): the firmware's own C code built for this computer (`mdfw.ini`, `emu/`) and run in EmuMD's Hatari with a Multi-device on the cartridge port. Use it first, and for everything it can show. `tools/dev/build_hatari_fork.sh` once (the build and EmuTOS go to `tools/dev/builds/emumd-cache/`), TOS images linked in `emu/tos/` (gitignored), then `python3 tools/dev/emu_check.py`: it builds `build/md-testrom.mdfw` and boots it on TOS 1.04 (ST), 1.62 (STE) and 2.06 (Mega STE), PASS when the firmware's log shows the test image verified and the main loop running. `--disk-a DISK.ST` runs a program from a floppy image's AUTO folder (`tools/dev/make_floppy.sh` builds one); never give its Hatari a GEMDOS drive, which takes the first 1 KB of the cartridge. EmuMD's limits for this firmware: an ST read of ROM3 returns no firmware data (`$FFFF`; it only feeds the command ring), so the ROM3 half of the read tests runs on the device only; and there is no PIO, DMA, SELECT button, LED, timing or real radio.
+3. **The device**, only for what EmuMD cannot show (the bus and its timing, ROM3 as data, the real card and radios, SELECT, the LED, flash and memory numbers): a Multi-device on an Atari with a Raspberry Pi Debug Probe on SWD and the debug UART. A session starts with the test microfirmware launched from Booster (a firmware flashed while Booster's settings name another app jumps straight back to Booster); then `tools/dev/console.py watch`, `tools/dev/flash.sh debug --probe`, `tools/dev/swd.py window target/atarist/TESTROM.BIN`. Flash only with the ST idle at the desktop: a flash while a program reads the cartridge crashes the ST. Never probe Booster.
 
 - `DPRINTF` (`rp/src/include/debug.h`) compiles to nothing unless `_DEBUG != 0`, and UART stdio is only enabled for debug builds (921,600 baud), so a release UF2 prints nothing.
-- Every build carries a build ID in flash (`rp/src/build_id.cmake`: the git commit, `-dirty.<hash>` for uncommitted changes, `+cmakedebug` for a CMake Debug build, `+debug` for `DEBUG_MODE`), and the ELF keeps its symbol table; `tools/dev/swd.py` finds everything by symbol.
+- Every build carries a build ID in flash (`rp/src/build_id.cmake`: the git commit, `-dirty.<hash>` for uncommitted changes, `+debug` for `DEBUG_MODE`), and the ELF keeps its symbol table; `tools/dev/swd.py` finds everything by symbol.
 - `OPENOCD` must be the Raspberry Pi fork's build (`../pico/openocd/src/openocd`); an older `openocd` earlier on `PATH` fails with `flash driver 'rp2xxx' not found`.
-- On-chip debugging uses a Picoprobe/Debug Probe and the `cortex-debug` config in `.vscode/launch.json` (needs `ARM_GDB_PATH` and `PICO_OPENOCD_PATH`). CMake source dir `rp/src`, build dir `rp/build`; `tools/dev/flash.sh` builds out of tree in `tools/dev/builds/`.
+- On-chip debugging uses a Picoprobe/Debug Probe and the `cortex-debug` config in `.vscode/launch.json` (needs `ARM_GDB_PATH` and `PICO_OPENOCD_PATH`). CMake source dir `rp/src`, build dir `rp/build`; `.vscode/cmake-variants.yaml` gives the two builds.
 
 ### Planning backlog (`docs/`)
 `docs/epics/` holds the local planning notes (`cockpit.sh` regenerates `STATUS.md`; `ITERATIONS.md`
@@ -95,15 +96,18 @@ working rules). **The whole `docs/` tree is gitignored** and lives only on the d
 ## Architecture
 
 ### RP2040 side (`rp/src/`)
-- `main.c` — sets clock (225 MHz) and voltage (`VREG_VOLTAGE_1_10`), prints the flash layout in debug, runs `gconfig_init` / `aconfig_init` (jumping to **Booster** via `reset_jump_to_booster()` on failure) and calls `emul_start()`. **Don't add features to `main.c`.**
-- `emul.c` — the whole app: copies `target_firmware` into `ROM_IN_RAM`, `init_romemul(NULL, NULL, false)` (ROM emulation only, no command callbacks), turns the LED on, then waits for a SELECT press; on release it sets `BOOT_FEATURE=BOOSTER` in the global config and jumps back to Booster.
-- `romemul.c` / `romemul.pio` — the ROM read engine: a PIO SM latches the 16-bit address and a chained DMA pair serves the word from `ROM_IN_RAM`. No IRQ, no CPU. This is exactly what the test exercises; changes here produce very strange bugs.
-- `gconfig.c` / `aconfig.c` / `settings/` — global and per-app config in flash sectors.
-- `blink.c`, `select.c`, `reset.c` — LED, SELECT button, jump-to-booster.
-- `include/constants.h` — GPIO map, `ROM_BANKS 2`, `ROM_SIZE_BYTES 0x10000`, clock/voltage.
+- `main.c` — the template's: sets clock (225 MHz) and voltage (`VREG_VOLTAGE_1_10`), prints the flash layout in debug, runs `gconfig_init` / `aconfig_init` (jumping to **Booster** via `reset_jump_to_booster()` on failure) and calls `emul_start()`. **Don't add features to `main.c`.**
+- `emul.c` — the app. Bring-up order: `health_init()` + watchdog → `commemul_init()` (the ROM3 capture) → `chandler_init()` → the test image copied into `ROM_IN_RAM` → `romemul_initTwoBanks()` (only now does the ST see the window) → SELECT. Main loop: `health_feed()`, `devhooks_poll()`, `select_poll()`, `chandler_loop()`, `health_tick()`. A short SELECT press (`emul_selectShortPress()`) sets `BOOT_FEATURE=BOOSTER` and jumps to Booster; a 10 s press is the factory reset. Nothing else starts at boot: no SD card, no radio chip, no LED.
+- `romemul.c` / `romemul.pio` — the two-bank ROM read engine (md-rom-emulator's ROM mode): two monitor state machines raise a PIO IRQ on !ROM4 or !ROM3, a reader samples A1–A16 plus !ROM4 as bit 16, and a chained DMA pair serves the word from `ROM_IN_RAM`. No IRQ handler, no CPU. This is exactly what the test exercises; changes here produce very strange bugs.
+- `commemul.c` / `commemul.pio` — the template's ROM3 capture: a PIO state machine samples every ROM3 access into a 4 KB DMA ring (`.comm_ring`, at the start of `RAM`), drained by polling. It shares pio0 with the engine: its writes to the READ/WRITE level-shifter enables fall before and after the engine's (md-rom-emulator runs the same pair in its debug ROM mode).
+- `chandler.c` / `include/chandler.h`, `tprotocol.c` — the template's polled command dispatcher and parser, and the RP-side source of truth for the shared-block offsets (`CHANDLER_*`, at `$FA2000`). No app command is registered yet.
+- `health.c` — boot reason, watchdog, heap and stack sampling; `swd.py crash` reads its record.
+- `gconfig.c` / `aconfig.c` / `settings/` — global and per-app config in flash sectors. This app keeps no settings of its own (`aconfig.c`'s defaults table is empty, as in v0.0.3).
+- `select.c` (SELECT on core 0, polled, with an edge interrupt), `reset.c`, `blink.c`, `network.c`, `sdcard.c`, `hw_config.c` — the template's; `blink.c`, `network.c` and `sdcard.c` are linked but nothing calls them yet.
+- `include/devhooks.h` — the debug-only SWD mailbox `tools/dev/swd.py` writes (`inject`, `app heap_hold N`, `app health N`).
 
 ### Cartridge window
-The Atari sees 128 KB at `$FA0000`–`$FBFFFF`: ROM4 (`$FA0000`, first 64 KB of `TESTROM.BIN`) and ROM3 (`$FB0000`, second 64 KB). The RP serves both from `ROM_IN_RAM` (`0x20020000`, 128 KB). The TOS program reads the window as one contiguous block from `$FA0000`.
+The Atari sees 128 KB at `$FA0000`–`$FBFFFF`: ROM4 (`$FA0000`, first 64 KB of `TESTROM.BIN`) and ROM3 (`$FB0000`, second 64 KB). The RP serves both from `ROM_IN_RAM` (`0x20020000`, 128 KB). Every word is test data: `chandler_init()` seeds its token and seed at `$FA2004`, so the image is copied after it, and nothing writes the window afterwards. The TOS program reads the window as one contiguous block from `$FA0000`.
 
 ### Atari test program (`app/atarist/src/`)
 - `main.c` — loads `TESTROM.BIN` (or `HATARROM.BIN` in debug) from the current directory, then for each bank runs: version string check, sequential word/byte reads, random word/byte reads (1,000,000 iterations each in release), and address-line walks, each with a "stats" variant. Mismatches print the failing address. (`ROM3_MEMORY_START` is defined wrongly as `$FC0000` but is unused; addresses are computed from `ROM4_MEMORY_START + bank * 64 KB`.)
@@ -114,17 +118,28 @@ The Atari sees 128 KB at `$FA0000`–`$FBFFFF`: ROM4 (`$FA0000`, first 64 KB of 
 | Region | Origin | Length | Purpose |
 | --- | --- | --- | --- |
 | `FLASH` | `0x10000000` | 1024 K | App code |
-| `ROM_TEMP` | `0x10100000` | 128 K | Scratch area for loaded ROMs |
+| `ROM_TEMP` | `0x10100000` | 128 K | Scratch area for loaded ROMs (unused here) |
 | `BOOSTER_APP_FLASH` | `0x10120000` | 768 K | Reserved for the Booster app (do not write) |
 | `CONFIG_FLASH` | `0x101E0000` | 120 K | 30 sectors of per-app config |
 | `GLOBAL_LOOKUP_FLASH` | `0x101FE000` | 4 K | UUID → config-sector lookup |
 | `GLOBAL_CONFIG_FLASH` | `0x101FF000` | 4 K | Global config |
-| `RAM` | `0x20000000` | 128 K | Data, BSS, heap |
+| `RAM` | `0x20000000` | 128 K | The ROM3 capture ring (first 4 KB), data, BSS, heap |
 | `ROM_IN_RAM` | `0x20020000` | 128 K | ROM4 + ROM3 as the Atari reads them |
-| `SCRATCH_X` / `SCRATCH_Y` | `0x20040000` / `0x20041000` | 4 K each | Stacks |
+| `SCRATCH_X` / `SCRATCH_Y` | `0x20040000` / `0x20041000` | 4 K each | Core 1 (never started) / core 0's stack, guarded |
+
+The heap stops at the end of `RAM` (`__StackLimit` = `0x20020000`, where the window starts), `malloc` returns NULL instead of panicking (`PICO_MALLOC_PANIC=0`), and the link guarantees 32 KB of heap (`PICO_HEAP_SIZE`). v0.0.3's heap limit ran past the window. Release build: 27 KB of code, 133 KB of read-only data (the test image is 128 KB of it), 6.9 KB of data and 6.2 KB of BSS, leaving 113 KB below the window for the heap.
 
 ### App identity
 `CURRENT_APP_UUID_KEY` (from the `APP_UUID_KEY` env var at CMake time) is the app's UUID4 and the key into `GLOBAL_LOOKUP_FLASH`. A UUID Booster doesn't know → the app jumps to Booster.
+
+### Divergences from the template
+The modules under `rp/src` are md-rom-emulator's at `3cd573d` (the template's at `6935f53`, with the two-bank window and the fixes it reported upstream), except:
+
+- **`emul.c`, `emul.h`:** this app's, headless (above).
+- **`aconfig.c`, `aconfig.h`:** the template's, with an empty defaults table.
+- **`CMakeLists.txt`:** without the display, terminal, downloads, HTTPS and the ROM Emulator's own modules.
+- **`chandler.c`, `aconfig.c`, `gconfig.c`, `main.c`:** window and flash addresses kept in `uintptr_t` (or cast through it), so the same sources build for EmuMD's 64-bit host; the device's code is unchanged by it.
+- **Not taken:** `term.*`, `display*.*`, `u8g2/`, `download.*`, `devdownload.*`, `httpc/`, `mbedtls_*`, `md5/`, `catalog.*`, `navlist.*`, `ui.*`, `romstore.*`, and the m68k sources.
 
 ## Publishing
 
@@ -132,10 +147,11 @@ The Atari sees 128 KB at `$FA0000`–`$FBFFFF`: ROM4 (`$FA0000`, first 64 KB of 
 
 ## Editing guardrails
 
-- **Never modify** `pico-sdk/`, `pico-extras/` or `emu/emumd/` — pinned submodules (the first two re-pinned on every build).
+- **Never modify** `pico-sdk/`, `pico-extras/`, `fatfs-sdk/` or `emu/emumd/` — pinned submodules (the first three re-pinned on every build). FatFs is configured in `rp/src/ff/ffconf.h`.
 - Don't touch `main.c` for feature work — start in `emul.c`.
 - Don't change `target/atarist/TESTROM.BIN` or `app/atarist/test/hatarrom.bin` unless that is the task, and then keep the firmware and the TOS-side copy in sync (see Build gotchas).
 - Match the existing C style (`.clang-format`, `.clang-tidy`). VS Code runs both; the command-line build runs neither.
+- Keep window and flash addresses in `uintptr_t`, never `uint32_t`: the EmuMD build is 64-bit and fails on a cast that cuts a pointer (`-Werror=pointer-to-int-cast`).
 
 ---
 
