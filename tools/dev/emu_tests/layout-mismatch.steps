@@ -1,0 +1,6 @@
+# A program built for a newer window layout than the firmware serves.
+@layout 2
+say "^FAIL  The microfirmware is older than this program" 100
+say "^  window layout 1, this program reads layout 2" 100
+say "^Update the Multidevice Test microfirmware from Booster" 100
+say "^\[ \] Line test: needs the test firmware" 100

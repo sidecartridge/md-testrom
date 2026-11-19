@@ -1,8 +1,7 @@
 #!/bin/bash
 
-# Fail fast. Without this a failed step was stepped over: the RP build went on
-# with the committed target_firmware.h, or build.sh copied a UF2 an earlier run
-# had left in rp/dist, and still exited 0 with a JSON announcing the new
+# Fail fast. Without this a failed step was stepped over: build.sh copied a
+# UF2 an earlier run had left in rp/dist, and still exited 0 with a JSON announcing the new
 # version. `-u` is not set: the argument checks below test unset arguments.
 # Whatever fails after dist/ is created also empties it, so no UF2 or JSON
 # that looks like a good build is left behind.
@@ -64,7 +63,6 @@ fi
 # program's Makefile reads it.
 echo "Copy version.txt to each project"
 cp version.txt rp/
-cp version.txt target/
 cp version.txt app/atarist/
 
 # Display the version information. Not exported: older stcmd wrappers use
@@ -82,12 +80,6 @@ echo "Release date: $RELEASE_DATE"
 export APP_UUID_KEY=$3
 echo "App UUID Key: $APP_UUID_KEY"
 
-# The test image the RP serves. target/atarist/build.sh regenerates
-# rp/src/include/target_firmware.h and fails if it cannot.
-echo "Building the test image"
-(cd target/atarist && ./build.sh)
-echo "Done building the test image"
-
 # Build the rp project in the RP architecture
 echo "Building rp project"
 (cd rp && ./build.sh "$BOARD_TYPE" "$BUILD_TYPE")
@@ -97,6 +89,17 @@ else
     cp "rp/dist/rp-$BOARD_TYPE-$BUILD_TYPE.uf2" dist/rp.uf2
 fi
 echo "Done building rp project"
+
+# The program for the Atari, MDTEST.TOS, in the toolkit's Docker image with
+# the repository mounted (it shares common/ with the firmware). The image tag
+# is the toolkit's, never this app's version.
+echo "Building MDTEST.TOS"
+export STCMD_IMAGE_TAG=${STCMD_IMAGE_TAG:-1.5.0}
+[ -t 0 ] || export STCMD_NO_TTY=1
+rm -rf app/atarist/build app/atarist/dist
+ST_WORKING_FOLDER="$SCRIPT_DIR" STCMD_QUIET=1 stcmd make -C app/atarist
+cp app/atarist/dist/MDTEST.TOS dist/
+echo "Done building MDTEST.TOS"
 
 # Calculate the md5sum of the generated rp.uf2 file. Stock macOS has md5, not
 # md5sum.

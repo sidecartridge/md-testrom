@@ -13,12 +13,13 @@
 
 #include "chandler.h"
 #include "commemul.h"
+#include "build_id.h"
 #include "gconfig.h"
 #include "health.h"
+#include "mdtest.h"
 
 // Included in this file only: it holds the definitions.
-#include "devhooks.h"         // Debug-only SWD mailbox
-#include "target_firmware.h"  // The test image the ST reads
+#include "devhooks.h"  // Debug-only SWD mailbox
 
 // Set by a short SELECT press, handled by the main loop.
 static volatile bool leaveForBooster = false;
@@ -97,22 +98,27 @@ void emul_start() {
   }
   chandler_init();
 
-  // The test image, copied after chandler_init(), which seeds its random
-  // token and seed in the window (at $FA2004): until the ST selects ROM3 as
-  // the command channel, every word of the window is test data. ROM4 is the
-  // lower 64 KB of the window, ROM3 the upper 64 KB. A plain copy rather than
-  // the XIP-stream DMA one: it is a few milliseconds, once, and it is the same
-  // copy under EmuMD, which has no XIP stream.
-  ERASE_FIRMWARE_IN_RAM();
-  COPY_FIRMWARE_TO_RAM_MEMCPY(target_firmware, target_firmware_length);
+  // The window's contents (common/mdtest.h): the computed test pattern in
+  // both banks and the header the ST program recognises the firmware by.
+  // Written after chandler_init(), which seeds its random token and seed in
+  // the window (at $FA2004): until the ST selects ROM3 as the command
+  // channel, every word of the window but the header is test data.
+  uint16_t *window = (uint16_t *)&__rom_in_ram_start__;
+  mdtest_fillWindow(window, RELEASE_VERSION, RELEASE_BUILD_ID);
 #if defined(_DEBUG) && (_DEBUG != 0)
-  // The ST must see exactly the generated image.
-  if (memcmp((const void *)&__rom_in_ram_start__, target_firmware,
-             (size_t)target_firmware_length * sizeof(uint16_t)) != 0) {
-    DPRINTF("ERROR: test image in RAM does not match target_firmware\n");
-  } else {
-    DPRINTF("Test image in RAM verified (%u words)\n",
-            (unsigned)target_firmware_length);
+  {
+    unsigned int wrong = 0;
+    for (uint32_t i = 0; i < MDTEST_WINDOW_WORDS; i++) {
+      bool header = i >= MDTEST_HEADER_INDEX &&
+                    i < MDTEST_HEADER_INDEX + MDTEST_HEADER_WORDS;
+      if (!header && window[i] != mdtest_patternWord((uint16_t)i)) wrong++;
+    }
+    if (wrong) {
+      DPRINTF("ERROR: %u words of the window are not the pattern\n", wrong);
+    } else {
+      DPRINTF("Test image in RAM verified (%u words)\n",
+              (unsigned)MDTEST_WINDOW_WORDS);
+    }
   }
 #endif
 

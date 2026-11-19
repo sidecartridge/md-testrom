@@ -557,10 +557,43 @@ def rom_image(path: str) -> bytes:
     return data
 
 
+def window_pattern(elf: str) -> int:
+    """The served window against the computed pattern, every word but the
+    header's; the header must carry the identifier, this layout and a valid
+    checksum."""
+    import mdtest_window
+    L = mdtest_window.layout()
+    mem = read_memory(cartridge_window(elf), WINDOW_BYTES)
+    words = [mem[2 * i] | (mem[2 * i + 1] << 8) for i in range(len(mem) // 2)]
+    first, last = L["HEADER_INDEX"], L["HEADER_INDEX"] + L["HEADER_WORDS"]
+    wrong = [i for i, w in enumerate(words)
+             if not first <= i < last and w != mdtest_window.pattern_word(i)]
+    header = mdtest_window.read_header(words)
+    print(f"header: id {header['id']!r}, layout {header['layout']}, state "
+          f"{header['state']}, version {header['version']!r}, build "
+          f"{header['build']!r}, checksum {'ok' if header['checksum_ok'] else 'BAD'}")
+    header_ok = (header["id"] == L["ID"] and header["checksum_ok"]
+                 and header["layout"] == L["LAYOUT_VERSION"])
+    if wrong:
+        i = wrong[0]
+        bank = "ROM4" if i < L["BANK_WORDS"] else "ROM3"
+        print(f"window: FAIL at ${ST_ROM4 + 2 * i:06X} ({bank}): reads "
+              f"0x{words[i]:04x}, the pattern has 0x{mdtest_window.pattern_word(i):04x}; "
+              f"{len(wrong)} words differ in all")
+    else:
+        print(f"window: {'PASS' if header_ok else 'FAIL (header)'}, "
+              f"{len(words) - L['HEADER_WORDS']} pattern words match")
+    return 0 if header_ok and not wrong else 3
+
+
 def cmd_window(args: argparse.Namespace) -> int:
     """Is what the ST reads exactly this file? Checks the cartridge window
     (what the bus serves) and, with --flash, ROM_TEMP in flash."""
     elf = matching_elf(args.elf)
+    if args.pattern:
+        return window_pattern(elf)
+    if not args.file:
+        raise SwdError("give the image to compare, or --pattern")
     image = rom_image(args.file)
     places = [("window", cartridge_window(elf))]
     if args.flash:
@@ -1910,7 +1943,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     wn = sub.add_parser("window", help="compare the cartridge window with a "
                         "file, as the ST reads it (and ROM_TEMP with --flash)")
-    wn.add_argument("file")
+    wn.add_argument("file", nargs="?",
+                    help="the image to compare (or --pattern)")
+    wn.add_argument("--pattern", action="store_true",
+                    help="compare with the computed test pattern and check "
+                    "the header (common/mdtest.h)")
     wn.add_argument("--flash", action="store_true",
                     help="also check ROM_TEMP in flash (this firmware does not "
                     "use it)")

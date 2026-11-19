@@ -26,7 +26,7 @@ BUILD := build
 CFLAGS := -std=c11 -g -O1 -Wall -Wextra -Werror -Wno-unknown-pragmas \
           -fsanitize=address,undefined -fno-omit-frame-pointer \
           -fno-sanitize-recover=undefined \
-          -I shim -isystem $(REPO)/rp/src/include
+          -I shim -isystem $(REPO)/rp/src/include -isystem $(REPO)/common
 LDFLAGS := -fsanitize=address,undefined -pthread
 
 C_TESTS := $(patsubst %.c,$(BUILD)/%,$(wildcard test_*.c))

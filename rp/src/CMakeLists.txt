@@ -130,7 +130,8 @@ target_sources(${PROJECT_NAME} PRIVATE
         sdcard.c
         select.c
         tprotocol.c
-        settings/settings.c)
+        settings/settings.c
+        ${CMAKE_CURRENT_LIST_DIR}/../../common/mdtest.c)
 
 # Create map/bin/hex/uf2 files
 pico_add_extra_outputs(${PROJECT_NAME})
@@ -178,6 +179,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/include
     ${CMAKE_CURRENT_LIST_DIR}/settings
+    ${CMAKE_CURRENT_LIST_DIR}/../../common
     ${CMAKE_CURRENT_LIST_DIR}/..)
 
 

@@ -1,0 +1,6 @@
+# Nothing on the cartridge port: open bus where the header should be.
+@hatari bare
+say "^Device:  none found" 100
+say "^FAIL  No Multi-device answers in the cartridge port" 100
+say "^\[ \] Line test: needs the test firmware" 100
+nosay "^PASS"

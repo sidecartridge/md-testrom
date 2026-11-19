@@ -43,14 +43,14 @@ make -C tests/host test
 
 # EmuMD: build the .mdfw and boot it on TOS 1.04, 1.62 and 2.06
 python3 tools/dev/emu_check.py
-# ... with a program from a floppy's AUTO folder; read the screenshot
-tools/dev/make_floppy.sh FOLDER disk.st
-python3 tools/dev/emu_check.py --disk-a disk.st --frames 3000 st-104
+# MDTEST.TOS against the firmware: every test on ST, STE, Mega STE, TT, Falcon
+python3 tools/dev/emu_harness.py --all
+python3 tools/dev/emu_harness.py --setup st-104 --test main-screen
 
 # The device (a session starts from the test microfirmware launched from Booster)
 python3 tools/dev/console.py watch &           # the debug UART, to tools/dev/logs/console.log
 tools/dev/flash.sh debug --probe               # build, flash, verify, read the build ID
-python3 tools/dev/swd.py window target/atarist/TESTROM.BIN
+python3 tools/dev/swd.py window --pattern
 python3 tools/dev/swd.py counters              # the command channel's counters
 python3 tools/dev/swd.py heap
 python3 tools/dev/swd.py crash
@@ -62,11 +62,11 @@ python3 tools/dev/swd.py crash
 | --- | --- | --- |
 | `flash driver 'rp2xxx' not found` | An old `openocd` earlier on `PATH` | `export OPENOCD=…/pico/openocd/src/openocd` |
 | Flashed, but the RP jumps straight to Booster | Booster's settings name another app as the current one | Launch the test microfirmware from Booster, then flash over it |
-| `ERROR: TESTROM.BIN starts with a cartridge magic` | The test image would make TOS run it | Keep the first long of the image zero |
 | EmuMD build: `cast to smaller integer type` | An address kept in a 32-bit integer | `uintptr_t` (EmuMD's host is 64-bit) |
 | EmuMD: every ROM3 read is `$FFFF` | EmuMD does not serve ROM3 data | Expected: ROM3's data is checked on the device |
+| `emu_harness.py`: no `MDTEST:` lines | Hatari without NatFeats | The harness passes `--natfeats yes`; by hand, add it |
 | EmuMD screenshot blank | The TOS has not finished booting | More `--frames` (STE and Mega STE take about 2,000) |
-| v0.0.3's program fails a few words at `$FA2004` | Something wrote the template's token into the window | The image must be copied after `chandler_init()` |
+| `swd.py window --pattern` fails a few words at `$FA2004` | Something wrote the template's token into the window | The window must be filled after `chandler_init()` |
 | `stcmd` pulls an image that does not exist | `$VERSION` (the app's) taken as the image tag by an old wrapper | `STCMD_IMAGE_TAG=1.5.0`, and never export `VERSION` |
 
 ## 4. Hard rules
