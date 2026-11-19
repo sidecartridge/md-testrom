@@ -45,4 +45,12 @@ int lt_run(LtTest test, int bank, const volatile uint16_t *window,
 /* Reads the test makes on one bank (for the screen's estimate). */
 uint32_t lt_reads(LtTest test, const LtSizes *sizes);
 
+/* The random tests' seed (0: the default). */
+void lt_seed(uint16_t value);
+
+#ifndef __m68k__
+/* Host tests: called with the window byte offset of every read. */
+extern void (*lt_hostRead)(uint32_t byteOffset);
+#endif
+
 #endif

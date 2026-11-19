@@ -1,0 +1,15 @@
+# One answer in 500 lost (each costs the program a 250 ms wait): every
+# command still answered, after a retry; usable with a warning, and the
+# counters agree.
+@debug
+@drop 500
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+key c
+say "^PASS  The device takes commands" 500
+say "^RP counters +\d+  PASS" 40000
+say "^WARN  Commands needed retries" 100
+say "^  \d+ retries in \d+ commands" 100
+say "^The device tests are unlocked" 100

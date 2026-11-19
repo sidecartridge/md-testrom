@@ -28,6 +28,9 @@ int console_key(void);
 void console_wrap(const char *text, int width,
                   void (*put)(const char *line, void *ctx), void *ctx);
 
+/* Every line also to mirror (the command channel's log), or none (NULL). */
+void console_setMirror(void (*mirror)(const char *line));
+
 /* The report: every line written since the start. */
 int console_reportLines(void);
 const char *console_reportLine(int index);

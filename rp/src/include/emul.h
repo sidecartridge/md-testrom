@@ -38,6 +38,12 @@
 // fault KIND A B: refill the window, then serve it as a faulty bus would
 // (MDTEST_FAULT_*, common/mdtest.h); fault 0 serves it whole again.
 #define DEVHOOKS_APP_FAULT 5
+// Every Nth command runs unanswered, as if its answer were lost (0: none).
+#define DEVHOOKS_APP_DROP 6
+// ROM3 selected (1) or given back (0) with no ST, for injected commands.
+#define DEVHOOKS_APP_SELECT 7
+// An RP restart as the ST sees it, with no reset (channel_benchRestart()).
+#define DEVHOOKS_APP_RESTART 8
 
 /**
  * @brief The application: never returns.

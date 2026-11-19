@@ -101,6 +101,122 @@
 #define MDTEST_FAULT_ROM3_IS_ROM4 7U  // ROM3 serves ROM4's words
 #define MDTEST_FAULT_PIN_DEAD 8U      // GPIO of data bit a / line a: both low
 
+// ---------------------------------------------------------------------------
+// The command channel: ROM3 selected (MDTEST_STATE_COMMANDS).
+//
+// The program sends commands as frames of ROM3 reads; the firmware answers
+// each by writing the frame's token at $FA2004 (the template's handshake),
+// after it has written the answer record at $FA2100 and, for the commands
+// that return data, the result buffer at $FA4000. Those areas, and the
+// template's block at $FA2000, are test data again once ROM3 is unselected.
+#define MDTEST_PROTOCOL_VERSION 1U
+
+// ROM3 becomes the command channel. Accepted while ROM3 is data only with
+// these eight words as its payload (after the token): no read pattern of the
+// line test forms it (tests/host/test_select.c). Answered; the header's
+// state word then says MDTEST_STATE_COMMANDS.
+#define MDTEST_CMD_SELECT ((MDTEST_APP_ID << 8) | 0x02U)
+#define MDTEST_SELECT_WORDS 8U
+#define MDTEST_SELECT_MAGIC \
+  {0x4D44U, 0x5445U, 0x5354U, 0x2053U, 0x454CU, 0x4543U, 0x5420U, 0x5233U}
+// Back to data: answered, then the whole window is the pattern again and the
+// state word says MDTEST_STATE_DATA (the program waits for it).
+#define MDTEST_CMD_UNSELECT ((MDTEST_APP_ID << 8) | 0x03U)
+// Words: the program's protocol version, its machine (_MCH, high word then
+// low). Answer: MDTEST_ANS_DATA = the firmware's protocol version, then its
+// capabilities (MDTEST_CAP_*, high word then low). The firmware's version and
+// build ID are in the header.
+#define MDTEST_CMD_HELLO ((MDTEST_APP_ID << 8) | 0x04U)
+// Words: any, up to MDTEST_ECHO_MAX_WORDS. Answer: the same words in the
+// result buffer, their count in MDTEST_ANS_LENGTH.
+#define MDTEST_CMD_ECHO ((MDTEST_APP_ID << 8) | 0x05U)
+// Words: the test (MDTEST_TEST_*), a sequence number, four parameters.
+// Answer: MDTEST_ANS_DATA = the job's number. A start while a job runs is
+// refused (MDTEST_STATUS_BUSY, the running job's number); a start with the
+// last start's sequence number answers that job again and starts nothing.
+#define MDTEST_CMD_JOB_START ((MDTEST_APP_ID << 8) | 0x06U)
+// Answer: MDTEST_ANS_DATA = the job's number, state (MDTEST_JOB_*), progress
+// (0 to 100), test; once it has ended its result is in the result buffer,
+// MDTEST_ANS_LENGTH bytes of "key=value" lines.
+#define MDTEST_CMD_JOB_STATUS ((MDTEST_APP_ID << 8) | 0x07U)
+#define MDTEST_CMD_JOB_CANCEL ((MDTEST_APP_ID << 8) | 0x08U)
+// Words: the sequence number (MDTEST_ANS_SEQ), the length in bytes, then the
+// text, two characters a word. One line of the program's screen, mirrored to
+// the RP. Answered at once.
+#define MDTEST_CMD_LOG ((MDTEST_APP_ID << 8) | 0x09U)
+// Words: the sequence number (MDTEST_ANS_SEQ). Answer: MDTEST_ANS_DATA = what
+// the bench asks the program to do next (MDTEST_REQUEST_*), the test, four
+// parameters. A request is handed out once.
+//
+// LOG and REQUEST change the RP's state, so a resend after a lost answer must
+// not run twice. The RP serves the next sequence number in every answer
+// record; the program reads it once before sending and every retry carries
+// it; the RP runs a command whose number is not the last one it ran, and only
+// then serves a new number. A repeat is answered again (REQUEST with the same
+// request) and changes nothing.
+#define MDTEST_CMD_REQUEST ((MDTEST_APP_ID << 8) | 0x0AU)
+// Answer: the RP's command counters in the result buffer, MDTEST_COUNTERS_*
+// order, each a long (high word first).
+#define MDTEST_CMD_COUNTERS ((MDTEST_APP_ID << 8) | 0x0BU)
+
+// The answer record, at $FA2100 (after the template's block): every app
+// command's answer, written before its token.
+#define MDTEST_ANSWER_INDEX (0x2100U / 2U)
+#define MDTEST_ANS_COMMAND 0U   // the command answered
+#define MDTEST_ANS_STATUS 1U    // MDTEST_STATUS_*
+#define MDTEST_ANS_BOOT 2U      // the RP's boot ID, high word then low
+#define MDTEST_ANS_COUNT 4U     // answers since the RP started (low word)
+#define MDTEST_ANS_LENGTH 5U    // what the result buffer holds
+#define MDTEST_ANS_SEQ 6U       // the sequence number LOG and REQUEST carry next
+#define MDTEST_ANS_DATA 7U      // the command's own words
+#define MDTEST_ANS_DATA_WORDS 8U
+#define MDTEST_ANSWER_WORDS (MDTEST_ANS_DATA + MDTEST_ANS_DATA_WORDS)
+
+#define MDTEST_STATUS_OK 0U
+#define MDTEST_STATUS_BAD 1U       // wrong size or parameter
+#define MDTEST_STATUS_BUSY 2U      // a job runs
+#define MDTEST_STATUS_UNKNOWN 3U   // a test this firmware does not have
+
+// The payload a frame carries is 2048 bytes, the token included.
+#define MDTEST_ECHO_MAX_WORDS 1020U
+
+// Capabilities: the tests this build has.
+#define MDTEST_CAP_DUMMY 0x00000001UL
+
+// The tests a job runs.
+#define MDTEST_TEST_DUMMY 1U  // parameters: seconds; result: seconds, steps
+
+#define MDTEST_JOB_IDLE 0U
+#define MDTEST_JOB_RUNNING 1U
+#define MDTEST_JOB_DONE 2U
+#define MDTEST_JOB_FAILED 3U
+#define MDTEST_JOB_CANCELLED 4U
+
+#define MDTEST_REQUEST_NONE 0U
+#define MDTEST_REQUEST_RUN 1U        // run the test (a job), print its result
+#define MDTEST_REQUEST_LINE_TEST 2U  // unselect, run the line test, select
+#define MDTEST_REQUEST_STOP 3U       // leave the bench loop
+#define MDTEST_REQUEST_CHANNEL_TEST 4U  // the command channel's own test
+
+#define MDTEST_COUNTERS_HANDLED 0U
+#define MDTEST_COUNTERS_DROPPED 1U
+#define MDTEST_COUNTERS_REPEATED 2U
+#define MDTEST_COUNTERS_CHECKSUM 3U
+#define MDTEST_COUNTERS_OVERRUNS 4U
+#define MDTEST_COUNTERS_LOGS 5U
+#define MDTEST_COUNTERS_WORDS 12U  // 6 longs
+
+// What a protocol mismatch asks the user to update.
+#define MDTEST_UPDATE_NOTHING 0
+#define MDTEST_UPDATE_FIRMWARE 1
+#define MDTEST_UPDATE_PROGRAM 2
+
+static inline int mdtest_updateAdvice(unsigned int program,
+                                      unsigned int firmware) {
+  if (program == firmware) return MDTEST_UPDATE_NOTHING;
+  return program > firmware ? MDTEST_UPDATE_FIRMWARE : MDTEST_UPDATE_PROGRAM;
+}
+
 /**
  * @brief The test pattern's word at a window index.
  *
@@ -163,5 +279,22 @@ void mdtest_setState(uint16_t *window, uint16_t state);
  */
 int mdtest_injectFault(uint16_t *window, unsigned int kind, unsigned int a,
                        unsigned int b);
+
+/**
+ * @brief Put the pattern back in words [first, first + count) of the window
+ *        (the header's words get the header's: call mdtest_setState after).
+ */
+void mdtest_restoreWords(uint16_t *window, uint32_t first, uint32_t count);
+
+/**
+ * @brief Text into window words, two characters a word, the first in the
+ *        high byte (as the 68000 reads it); an odd length's last low byte 0.
+ */
+void mdtest_putText(uint16_t *words, const char *text, uint32_t length);
+
+/**
+ * @brief Text out of words written as mdtest_putText writes them.
+ */
+void mdtest_getText(const uint16_t *words, char *text, uint32_t length);
 
 #endif  // MDTEST_H

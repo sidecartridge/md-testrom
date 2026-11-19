@@ -1,0 +1,11 @@
+# The bench asks for the command channel's test: run with nobody at the ST.
+@debug
+@bench commands
+say "^PASS  The device takes commands" 500
+request 4
+say "^Command channel test" 500
+say "^PASS  The command channel is clean" 40000
+say "^Bench: done" 100
+log "ST\| PASS  The command channel is clean" 100
+request 3
+say "^Bench mode: stopped by the RP" 500

@@ -46,6 +46,31 @@ void mdtest_setState(uint16_t *window, uint16_t state) {
   sealHeader(header);
 }
 
+void mdtest_restoreWords(uint16_t *window, uint32_t first, uint32_t count) {
+  for (uint32_t i = first; i < first + count && i < MDTEST_WINDOW_WORDS; i++) {
+    if (i >= MDTEST_HEADER_INDEX &&
+        i < MDTEST_HEADER_INDEX + MDTEST_HEADER_WORDS) {
+      continue;
+    }
+    window[i] = mdtest_patternWord((uint16_t)i);
+  }
+}
+
+void mdtest_putText(uint16_t *words, const char *text, uint32_t length) {
+  for (uint32_t i = 0; i < length; i += 2) {
+    uint16_t high = (uint8_t)text[i];
+    uint16_t low = (i + 1 < length) ? (uint8_t)text[i + 1] : 0;
+    words[i / 2] = (uint16_t)((high << 8) | low);
+  }
+}
+
+void mdtest_getText(const uint16_t *words, char *text, uint32_t length) {
+  for (uint32_t i = 0; i < length; i++) {
+    uint16_t w = words[i / 2];
+    text[i] = (char)((i & 1) ? (w & 0xFF) : (w >> 8));
+  }
+}
+
 static uint16_t savedHeader[MDTEST_HEADER_WORDS];
 
 // The fresh window's word at an index, whatever the fault did to it since.

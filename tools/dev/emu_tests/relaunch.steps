@@ -1,0 +1,8 @@
+# Quit, then the program again (the second copy in the AUTO folder starts as
+# the first ends): a run leaves nothing behind that the next trips on.
+@twice
+say "^Press a key" 100
+key x
+key q
+sayn 2 "^SidecarTridge" 1500
+sayn 2 "^Press a key" 1500

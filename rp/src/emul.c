@@ -12,58 +12,18 @@
 #include "emul.h"
 
 #include "chandler.h"
+#include "channel.h"
 #include "commemul.h"
 #include "build_id.h"
 #include "gconfig.h"
 #include "health.h"
 #include "mdtest.h"
-#include "tprotocol.h"
 
 // Included in this file only: it holds the definitions.
 #include "devhooks.h"  // Debug-only SWD mailbox
 
 // The window, as the engine serves it.
 static uint16_t *window;
-
-// The last line-test verdict the ST sent, for the bench (swd.py reads it by
-// symbol); the sequence number tells a new one from the last.
-typedef struct {
-  uint16_t words[MDTEST_VERDICT_WORDS];
-  uint32_t count;
-} LineVerdict;
-volatile LineVerdict lineVerdict;
-// Frames seen while ROM3 is data, and those with a bad checksum.
-volatile uint32_t dataStateFrames;
-volatile uint32_t dataStateChecksumErrors;
-
-// While ROM3 is test data, frames are parsed but never answered: the
-// template's dispatcher writes its answer into the window, over the data
-// under test. The parser is fed by this loop alone until the command channel
-// is selected, so it is never fed two streams.
-static void onDataStateFrame(const TransmissionProtocol *frame) {
-  dataStateFrames++;
-  if (frame->command_id != MDTEST_CMD_LINE_VERDICT ||
-      frame->payload_size < 4U + 2U * MDTEST_VERDICT_WORDS) {
-    return;
-  }
-  const uint16_t *words = (const uint16_t *)frame->payload + 2;  // the token
-  for (unsigned int i = 0; i < MDTEST_VERDICT_WORDS; i++) {
-    lineVerdict.words[i] = words[i];
-  }
-  lineVerdict.count++;
-  DPRINTF("Line test verdict %u: class %u, first $%04X%04X, errors %u, run %u\n",
-          words[0], words[1], words[2], words[3], words[4], words[5]);
-}
-
-static void onDataStateChecksumError(const TransmissionProtocol *frame) {
-  (void)frame;
-  dataStateChecksumErrors++;
-}
-
-static void consumeDataStateSample(uint16_t sample) {
-  tprotocol_parse((uint16_t)(sample ^ CHANDLER_ADDRESS_HIGH_BIT),
-                  onDataStateFrame, onDataStateChecksumError);
-}
 
 #if (defined(_DEBUG) && (_DEBUG != 0)) || (defined(EMUMD) && EMUMD)
 // Serve the window as a faulty bus would (debug builds, and EmuMD's bench).
@@ -131,6 +91,20 @@ static uint32_t emul_devhooksApp(uint16_t commandId, const uint16_t *payload,
       if (payloadSize < 6U) return 0;
       serveFault(payload[0], payload[1], payload[2]);
       return 1;
+    case DEVHOOKS_APP_DROP: {
+      extern uint32_t chandlerDropEvery;
+      if (payloadSize < 2U) return 0;
+      chandlerDropEvery = payload[0];
+      DPRINTF("Dropping the answer to one command in %u\n", payload[0]);
+      return 1;
+    }
+    case DEVHOOKS_APP_SELECT:
+      if (payloadSize < 2U) return 0;
+      channel_benchSelect(payload[0] != 0U);
+      return 1;
+    case DEVHOOKS_APP_RESTART:
+      channel_benchRestart();
+      return 1;
     case DEVHOOKS_APP_HEALTH:
       if (payloadSize < 2U || payload[0] == HEALTH_TEST_NONE ||
           payload[0] > HEALTH_TEST_STACK_OVERFLOW) {
@@ -191,8 +165,15 @@ void emul_start() {
     if (fault && sscanf(fault, "%u %u %u", &kind, &a, &b) >= 1) {
       serveFault(kind, a, b);
     }
+    // MDTEST_DROP="N": every Nth command runs unanswered.
+    extern uint32_t chandlerDropEvery;
+    const char *drop = getenv("MDTEST_DROP");
+    if (drop) chandlerDropEvery = (uint32_t)strtoul(drop, NULL, 10);
   }
 #endif
+
+  // The app's commands, answered once the ST selects ROM3.
+  channel_init(window);
 
   // Only now does the ST see the window: both banks served by chained DMAs
   // feeding the PIO, no CPU involved. Without the engine the ST reads
@@ -221,9 +202,9 @@ void emul_start() {
     health_setPhase(HEALTH_PHASE_MAIN_LOOP);
     devhooks_poll();
     select_poll();
-    // Drain the ROM3 capture on every pass. ROM3 is test data: frames are
-    // parsed, never answered (onDataStateFrame()).
-    commemul_poll(consumeDataStateSample);
+    // The ROM3 capture on every pass: test data (frames parsed, only the
+    // select frame answered), or the command channel and its jobs.
+    channel_poll();
     // Heap sampling, the debug summary and the debug test hooks
     health_tick();
   }

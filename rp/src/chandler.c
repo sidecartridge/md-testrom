@@ -60,6 +60,13 @@ uint32_t chandlerMaxQuietUs = 0;
 uint32_t chandlerFramePolls = 0;
 uint32_t chandlerPollUs = 0;
 uint32_t chandlerInjected = 0;
+#if (defined(_DEBUG) && (_DEBUG != 0)) || (defined(EMUMD) && EMUMD)
+// The bench's fault: every Nth command runs but gets no answer, as if the
+// answer were lost (0: none). chandlerFaultDropped counts them.
+uint32_t chandlerDropEvery = 0;
+uint32_t chandlerFaultDropped = 0;
+static uint32_t chandlerDropTick = 0;
+#endif
 static bool chandlerFrameInFlight = false;
 static bool chandlerAwaitingFirstSample = false;
 static uint32_t chandlerLastToken = 0;
@@ -306,6 +313,15 @@ void __not_in_flash_func(chandler_loop)() {
     chandler_clear_pending_protocol();
     return;
   }
+
+#if (defined(_DEBUG) && (_DEBUG != 0)) || (defined(EMUMD) && EMUMD)
+  if (chandlerDropEvery != 0 && ++chandlerDropTick >= chandlerDropEvery) {
+    chandlerDropTick = 0;
+    chandlerFaultDropped++;
+    chandler_clear_pending_protocol();
+    return;
+  }
+#endif
 
   // The answer. The ST spins on it, so nothing slow goes between the callbacks
   // and this write: an LED update (on a Pico W a bus transaction to the Wi-Fi

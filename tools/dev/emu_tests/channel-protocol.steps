@@ -1,0 +1,12 @@
+# A program that speaks a newer protocol than the firmware: update the
+# firmware.
+@debug
+@protocol 2
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+key c
+say "^FAIL  Program and firmware differ" 500
+say "^  protocol: program 2, firmware 1" 100
+say "^Update the Multidevice Test microfirmware" 100

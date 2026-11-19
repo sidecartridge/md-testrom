@@ -23,7 +23,7 @@ to their source as this firmware allows, so a fix travels both ways with a plain
 | `console.py`, `flash.sh`, `swd.py`, `stackdepth.py`, `measure_builds.sh`, `tools_harness.py`, `select_harness.py`, `gdb/`, this README's sections from "Firmware support" on | md-rom-emulator (the template's tools, adapted there to a 128 KB two-bank window) | `3cd573d` |
 | `build_hatari_fork.sh`, `hatari_fork.cmake`, `mdfw.sh`, `emu_harness.py` (rewritten since) | md-printer-emulator | `e81bcbc` |
 | `make_floppy.sh` | md-printer-emulator | `687affb` |
-| `emu_check.py` | this repository | |
+| `emu_check.py`, `bus_faults.py`, `job.py`, `st_loop.py`, `mdtest_window.py` | this repository | |
 | `make_floppy_image.py` | md-drives-emulator | `002fbc8` |
 | `../../rp/src/build_id.cmake` | md-rom-emulator | `3cd573d` |
 
@@ -37,9 +37,13 @@ What differs here:
 
 - **The firmware is headless.** It draws nothing and puts no code on the ST, so `swd.py screen`,
   `text`, `key`, `type` and `st-reset` say they do not apply and exit 1.
-- **The command channel runs, but nothing sends commands yet.** `swd.py counters` and `ring`
-  show what the capture and the parser made of the ST's ROM3 reads (test data, so far);
-  `inject` and `app` (`heap_hold`, `health`) work on debug builds.
+- **The command channel runs once the program selects ROM3.** `swd.py counters` and `ring` show
+  what the capture and the parser made of the ST's ROM3 reads; `inject` and `app` (`heap_hold`,
+  `health`, and this app's `fault`, `drop`, `select`, `restart`) work on debug builds, and
+  injected commands answer only while ROM3 is selected (`app select 1`). `app restart` is an RP
+  restart as the ST sees it (ROM3 test data again, the job gone, a new boot ID) with no reset:
+  `swd.py reset` while a program reads the cartridge crashes the ST, as a flash does. `swd.py log` shows the program's screen
+  as it mirrors it to the RP, `swd.py request` asks the program in bench mode to do something.
 - **`swd.py window FILE`** checks only the cartridge window by default (this firmware does not use
   `ROM_TEMP`; `--flash` checks it too), and says how many bytes differ.
 - **`select_harness.py`**: the firmware has no setup menu. "Running" means the RP's VTOR holds
@@ -103,6 +107,18 @@ prints every line it shows through NatFeats (`MDTEST: <line>` in `hatari.out`); 
 `tools/dev/emu_tests/*.steps` press keys, wait for lines, and check the files it saves on the
 floppy once Hatari has stopped. `--all` runs every test on every setup. `@fault KIND A B` in a
 test serves the window as that faulty bus would (`MDTEST_FAULT`), to check the line test names it.
+`@debug` builds the program's debug variant (EmuMD's ROM3 cannot pass the line test, so the
+command channel's tests override the gate), `@drop N` loses every Nth answer (`MDTEST_DROP`),
+`@protocol N` builds a program that speaks protocol N, `@bench TEXT` puts an `MDTEST.BNC` holding
+TEXT on the floppy, `@twice` puts the program in the AUTO folder twice (quitting the first starts
+it again), and the step `request CODE ...` hands the program a bench request (`request 255`: the
+firmware restarts as the ST sees it, `app restart`).
+
+The command channel, with no ST: `job.py run dummy 2 --expect seconds=2` selects ROM3 through
+the debug hook, runs a job by injected commands, reads its result from the window and gives ROM3
+back (`tools_harness.py --channel` adds hello, echo and the window afterwards). With the ST in
+bench mode (`MDTEST.BNC` holding `requests`): `st_loop.py run dummy 2 --expect seconds=2 --times
+10`, or the same with `--emu st-104` under EmuMD.
 
 On the device, `swd.py verdict` reads the last line-test verdict the ST sent, and
 `bus_faults.py` serves each fault in turn (`swd.py app fault`) while `MDTEST.TOS` runs in bench
