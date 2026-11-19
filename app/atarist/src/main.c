@@ -7,7 +7,10 @@
  */
 #include <mint/osbind.h>
 #include <stdio.h>
+#include <string.h>
 
+#include "chscreen.h"
+#include "commands.h"
 #include "console.h"
 #include "device.h"
 #include "ltscreen.h"
@@ -24,8 +27,11 @@
 
 static Machine machine;
 static Device device;
-/* The device tests run only once the line test has passed (or, on a debug
- * build, the gate was overridden), for this session. */
+/* The gate: the device tests run only once the line test and then the
+ * command channel's test have passed (or, on a debug build, the gate was
+ * overridden), for this session. */
+static int linePassed;
+static int channelPassed;
 static int unlocked;
 static int overridden;
 
@@ -95,6 +101,7 @@ static int showDevice(void) {
   if (device.state != MDTEST_STATE_DATA) {
     console_line(T_FOUND_COMMANDS);
     console_line(T_FOUND_COMMANDS_DETAIL, device.state);
+    if (cmd_unselect() != CMD_OK) console_line(T_CH_UNSELECT_FAIL);
   }
   console_line(T_FOUND_OK);
   return 1;
@@ -109,8 +116,12 @@ static void showMenu(int lineTestReady) {
   } else {
     console_line(T_MENU_LINE_OFF);
   }
+  if (linePassed || overridden) console_line(T_MENU_CHANNEL);
   if (unlocked) {
     console_line(T_MENU_UNLOCKED);
+  } else if (linePassed) {
+    console_line(T_MENU_LOCKED1);
+    console_line(T_MENU_CHANNEL_NEXT);
   } else {
     console_line(T_MENU_LOCKED1);
     console_line(T_MENU_LOCKED2);
@@ -123,8 +134,31 @@ static void showMenu(int lineTestReady) {
   console_line(T_MENU_PROMPT);
 }
 
+/* ROM3 as data again before any read of it: the mirror stops with it. */
+static void giveBackRom3(void) {
+  console_setMirror(0);
+  if (cmd_selected() && cmd_unselect() != CMD_OK) {
+    console_line(T_CH_UNSELECT_FAIL);
+  }
+}
+
+static void lineTestPassed(void) {
+  linePassed = 1;
+  unlocked = overridden || (linePassed && channelPassed);
+}
+
 static void lineTest(const LtSizes *sizes) {
-  if (ltscreen_run(sizes, ltscreen_estimate(sizes)) == LT_PASS) unlocked = 1;
+  giveBackRom3();
+  if (ltscreen_run(sizes, ltscreen_estimate(sizes)) == LT_PASS) {
+    lineTestPassed();
+  }
+}
+
+static void channelTest(void) {
+  ChVerdict v = chscreen_test(machine.mch);
+  channelPassed = v == CH_CLEAN || v == CH_RETRIES;
+  unlocked = overridden || (linePassed && channelPassed);
+  if (channelPassed && unlocked) console_line(T_GATE_UNLOCKED);
 }
 
 /* The quick pass at each Mega STE setting; the user's is put back. */
@@ -132,6 +166,7 @@ static void lineTestMegaSte(void) {
   static const unsigned char settings[3] = {0x00, 0x02, 0x03};
   unsigned char saved = MSTE_SPEED_CACHE;
   int passes = 0;
+  giveBackRom3();
   for (int i = 0; i < 3; i++) {
     MSTE_SPEED_CACHE = (unsigned char)((saved & 0xFC) | settings[i]);
     console_blank();
@@ -142,24 +177,102 @@ static void lineTestMegaSte(void) {
     }
   }
   MSTE_SPEED_CACHE = saved;
-  if (passes == 3) unlocked = 1;
+  if (passes == 3) lineTestPassed();
 }
 
-/* Bench mode: the line test in a loop, each verdict sent to the RP, until a
- * key. Selected by MDTEST.BNC next to the program. */
-static int benchMode(void) {
-  static char dta[44];
-  void *oldDta = Fgetdta();
-  Fsetdta(dta);
-  int found = Fsfirst(BENCH_FILE, 0) >= 0;
-  Fsetdta(oldDta);
-  if (!found) return 0;
-  console_line(T_BENCH);
-  for (unsigned long run = 1; !Bconstat(2); run++) {
-    console_line(T_BENCH_RUN, run);
-    ltscreen_run(&lt_quick, ltscreen_estimate(&lt_quick));
-  }
+/* What MDTEST.BNC asks for: its first word. */
+#define BENCH_LINE 1     /* anything else: the line test in a loop */
+#define BENCH_REQUESTS 2 /* "requests": the line test, then the RP's requests */
+#define BENCH_COMMANDS 3 /* "commands", debug builds: the requests at once */
+
+static int benchFile(void) {
+  char text[16] = {0};
+  long handle = Fopen(BENCH_FILE, 0);
+  if (handle < 0) return 0;
+  long n = Fread((short)handle, sizeof(text) - 1, text);
+  Fclose((short)handle);
+  if (n > 0 && strncmp(text, "requests", 8) == 0) return BENCH_REQUESTS;
+#ifdef MDTEST_DEBUG
+  if (n > 0 && strncmp(text, "commands", 8) == 0) return BENCH_COMMANDS;
+#endif
+  return BENCH_LINE;
+}
+
+static int keyPressed(void) {
+  if (!Bconstat(2)) return 0;
   (void)Bconin(2);
+  return 1;
+}
+
+static void waitTicks(unsigned long ticks) {
+  unsigned long start = *(volatile unsigned long *)0x4BA;
+  while (*(volatile unsigned long *)0x4BA - start < ticks) {
+  }
+}
+
+/* The RP's requests, polled until it says stop or a key is pressed. */
+/* An RP that started again serves ROM3 as data once it is up, seconds after
+ * the reset: select it again, for as long as a boot takes. */
+#define REOPEN_TICKS (200UL * 10)
+
+static int reopen(void) {
+  unsigned long start = *(volatile unsigned long *)0x4BA;
+  while (*(volatile unsigned long *)0x4BA - start < REOPEN_TICKS) {
+    if (cmd_select() == CMD_OK) break;
+  }
+  return chscreen_open(machine.mch);
+}
+
+static void benchRequests(void) {
+  console_line(T_BENCH_REQUESTS);
+  if (!chscreen_open(machine.mch)) return;
+  while (!keyPressed()) {
+    CmdAnswer a;
+    waitTicks(50);
+    if (cmd_request(&a) != CMD_OK) {
+      if (!cmd_selected() && !reopen()) return;
+      continue;
+    }
+    if (a.data[0] == MDTEST_REQUEST_RUN) {
+      console_line(T_BENCH_RUN_TEST, a.data[1]);
+      chscreen_job(a.data[1], &a.data[2]);
+      console_line(T_BENCH_DONE);
+    } else if (a.data[0] == MDTEST_REQUEST_LINE_TEST) {
+      giveBackRom3();
+      ltscreen_run(&lt_quick, ltscreen_estimate(&lt_quick));
+      if (!chscreen_open(machine.mch)) return;
+      console_line(T_BENCH_DONE);
+    } else if (a.data[0] == MDTEST_REQUEST_CHANNEL_TEST) {
+      chscreen_test(machine.mch);
+      if (!cmd_selected() && !reopen()) return;
+      console_line(T_BENCH_DONE);
+    } else if (a.data[0] == MDTEST_REQUEST_STOP) {
+      console_line(T_BENCH_STOP);
+      break;
+    }
+  }
+  giveBackRom3();
+}
+
+/* Bench mode, selected by MDTEST.BNC next to the program: the line test in a
+ * loop, each verdict sent to the RP, until a key; or the RP's requests. */
+static int benchMode(void) {
+  int mode = benchFile();
+  if (!mode) return 0;
+  if (mode == BENCH_COMMANDS) {
+    console_line(T_BENCH_SKIP);
+    benchRequests();
+    return 1;
+  }
+  console_line(T_BENCH);
+  for (unsigned long run = 1; !keyPressed(); run++) {
+    console_line(T_BENCH_RUN, run);
+    LtVerdict v = ltscreen_run(&lt_quick, ltscreen_estimate(&lt_quick));
+    if (mode == BENCH_REQUESTS && v == LT_PASS) {
+      benchRequests();
+      return 1;
+    }
+  }
   return 1;
 }
 
@@ -169,6 +282,7 @@ static void run(void) {
   console_line(T_TITLE, VERSION);
   machine_identify(&machine);
   showMachine();
+  cmd_init(machine.mch, machine_isMegaSte(&machine));
   device_recognise(&device);
   int ready = showDevice();
   if (ready && benchMode()) {
@@ -183,7 +297,8 @@ static void run(void) {
     if (key == 's') {
       report_save(overridden ? T_REPORT_GATE_OVERRIDDEN
                   : unlocked ? T_REPORT_GATE_PASSED
-                             : T_REPORT_GATE_LOCKED);
+                  : linePassed ? T_REPORT_GATE_CHANNEL
+                               : T_REPORT_GATE_LOCKED);
       console_line(T_MENU_PROMPT);
       continue;
     }
@@ -193,6 +308,8 @@ static void run(void) {
       lineTest(&lt_long);
     } else if (ready && key == 'm' && machine_isMegaSte(&machine)) {
       lineTestMegaSte();
+    } else if (key == 'c' && (linePassed || overridden)) {
+      channelTest();
 #ifdef MDTEST_DEBUG
     } else if (key == 'o' && !unlocked) {
       console_line(T_GATE_OVERRIDE);
@@ -204,6 +321,7 @@ static void run(void) {
     }
     showMenu(ready);
   }
+  giveBackRom3();
   Cconws("\033e");
 }
 

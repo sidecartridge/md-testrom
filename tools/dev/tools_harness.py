@@ -11,6 +11,8 @@ restarts the RP on the way.
     python3 tools/dev/tools_harness.py --build    # also build both types and check them
     python3 tools/dev/tools_harness.py --flash    # also flash the debug build first
     python3 tools/dev/tools_harness.py --reset    # also restart the RP at the end
+    python3 tools/dev/tools_harness.py --channel  # only the command channel's
+    python3 tools/dev/tools_harness.py --channel --rounds 1000
 
 Leaves the setup menu on screen. Exits 0 when every check passes. Writes
 tools/dev/logs/tools-harness-<time>.json.
@@ -252,8 +254,79 @@ def device_checks(do_reset):
         check("reset: the menu is back", "Select an option" in text())
 
 
+def borrowed_whole(elf, L, whole=False):
+    """The window's words where the channel borrows ROM4 (or all of it) are
+    the pattern again: the template's block, the answer record, the result
+    buffer."""
+    import job
+    import mdtest_window
+    base = job.window_base(elf)
+    areas = ([(0, L["WINDOW_WORDS"])] if whole else
+             [(L["COMMAND_BLOCK_INDEX"],
+               L["ANSWER_INDEX"] + L["ANSWER_WORDS"] - L["COMMAND_BLOCK_INDEX"]),
+              (L["RESULT_BUFFER_INDEX"], L["RESULT_BUFFER_WORDS"])])
+    header = range(L["HEADER_INDEX"], L["HEADER_INDEX"] + L["HEADER_WORDS"])
+    for first, count in areas:
+        words = job.struct.unpack(f"<{count}H", swd.read_memory(base + 2 * first, 2 * count))
+        for i, w in enumerate(words, first):
+            if i not in header and w != mdtest_window.pattern_word(i):
+                return False
+    return True
+
+
+def select_rounds(rounds):
+    """Select, hello, unselect, and the window whole after each, ROUNDS times."""
+    import job
+    elf = swd.matching_elf(None)
+    L = job.L
+    failed = 0
+    for n in range(1, rounds + 1):
+        job.app(elf, "SELECT", 1)
+        a = job.command(elf, "HELLO", L["PROTOCOL_VERSION"], 0, 0)
+        job.app(elf, "SELECT", 0)
+        ok = a["status"] == "ok" and borrowed_whole(elf, L, whole=n % 100 == 0)
+        failed += not ok
+        if not ok or n % 100 == 0:
+            print(f"    round {n}: {'ok' if ok else 'FAIL'} ({failed} failed so far)")
+    check(f"{rounds} select, hello, unselect rounds, the window whole after each",
+          failed == 0, f"{failed} failed")
+
+
+def channel_checks():
+    """The command channel through the probe, no ST needed: ROM3 selected by
+    the debug hook, injected commands, the answers read from the window."""
+    import job
+    print("command channel")
+    elf = swd.matching_elf(None)
+    try:
+        check("app select 1 selects ROM3", job.app(elf, "SELECT", 1) == 1)
+        L = job.L
+        a = job.command(elf, "HELLO", L["PROTOCOL_VERSION"], 0, 0)
+        check("hello answers the protocol version",
+              a["status"] == "ok" and a["data"][0] == L["PROTOCOL_VERSION"],
+              f"protocol {a['data'][0]}, boot {a['boot']:08X}")
+        words = [0x1234, 0xABCD, 0x0000, 0xFFFF, 0x8000, 0x7FFF]
+        a = job.command(elf, "ECHO", *words)
+        base = job.window_base(elf) + 2 * L["RESULT_BUFFER_INDEX"]
+        back = list(job.struct.unpack(f"<{len(words)}H",
+                                      swd.read_memory(base, 2 * len(words))))
+        check("echo returns its words", a["length"] == len(words) and back == words)
+    finally:
+        check("app select 0 gives ROM3 back", job.app(elf, "SELECT", 0) == 1)
+    rc, out = run(sys.executable, os.path.join(DEV, "job.py"), "run", "dummy", "2",
+                  "--expect", "seconds=2", timeout=120)
+    check("job.py run dummy 2", rc == 0, out.strip().splitlines()[-1] if out.strip() else "")
+    rc, out = swdpy("window", "--pattern")
+    check("the window is whole test data after unselect", rc == 0 and "PASS" in out,
+          out.strip().splitlines()[-1] if out.strip() else "")
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--channel", action="store_true",
+                    help="only the command channel's checks")
+    ap.add_argument("--rounds", type=int, default=0,
+                    help="with --channel: also N select/hello/unselect rounds")
     ap.add_argument("--build", action="store_true")
     ap.add_argument("--flash", action="store_true")
     ap.add_argument("--reset", action="store_true")
@@ -267,7 +340,13 @@ def main():
         check("flash.sh debug builds, flashes and verifies", rc == 0,
               out.strip().splitlines()[-1] if out.strip() else "")
         time.sleep(6)  # let the boot reach the main loop (Wi-Fi connect)
-    device_checks(args.reset)
+    if args.channel:
+        with swd.held_openocd():
+            channel_checks()
+            if args.rounds:
+                select_rounds(args.rounds)
+    else:
+        device_checks(args.reset)
     failed = [r for r in results if not r["ok"]]
     print(f"\n{len(results) - len(failed)}/{len(results)} checks passed")
     report = os.path.join(DEV, "logs", f"tools-harness-{started}.json")

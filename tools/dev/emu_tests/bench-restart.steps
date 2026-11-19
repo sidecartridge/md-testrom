@@ -1,0 +1,18 @@
+# The RP restarts during a job, as the ST sees it (request 255, the
+# firmware's own: ROM3 given back as test data, the job forgotten, a new boot
+# ID). The program reports the restart, selects ROM3 again and keeps taking
+# requests.
+@debug
+@bench commands
+say "^PASS  The device takes commands" 500
+request 1 1 20
+say "^Bench: test 1" 500
+request 255
+say "^FAIL  The device restarted during test 1" 1500
+say "^Bench: done" 500
+sayn 2 "^PASS  The device takes commands" 3000
+request 1 1 2
+sayn 2 "^Bench: done" 6000
+say "^  seconds=2" 100
+request 3
+say "^Bench mode: stopped by the RP" 500

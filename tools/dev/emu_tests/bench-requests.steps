@@ -1,0 +1,15 @@
+# Bench mode driven by the RP: a dummy job run to its result, then stop.
+# EmuMD's line test cannot pass (no ROM3 data), so the debug bench skips it.
+@debug
+@bench commands
+say "^WARN  Line test skipped" 500
+say "^PASS  The device takes commands" 500
+request 1 1 2
+say "^Bench: test 1" 500
+say "^  test=dummy" 1000
+say "^  seconds=2" 100
+log "ST\|   seconds=2" 100
+say "^Bench: done" 100
+request 3
+say "^Bench mode: stopped by the RP" 500
+log "ROM3 is test data again" 500

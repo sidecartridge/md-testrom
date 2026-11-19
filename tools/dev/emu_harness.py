@@ -24,20 +24,29 @@ Steps (--step, or --test NAME for tools/dev/emu_tests/NAME.steps):
                         scancode in hex (0x1c is Return)
   say REGEX FRAMES      wait until the program has shown a line matching
                         REGEX
+  sayn N REGEX FRAMES   wait until the program has shown N lines matching
+                        REGEX
   nosay REGEX           FAIL if the program has shown a line matching REGEX
   machine               the program's machine line names the setup's machine
   log REGEX FRAMES      wait until Hatari's output (the firmware's log
                         included) matches REGEX
+  request CODE [TEST P0 P1 P2 P3]
+                        the bench's next request to the program
+                        (MDTEST_REQUEST_* in common/mdtest.h)
   shot NAME             a screenshot, shots/NAME.png
   floppy NAME REGEX     at the end, with Hatari stopped: the floppy holds
                         the file NAME and its text matches REGEX
   nofloppy NAME         at the end: the floppy has no file NAME
 
-A test's lines "@hatari bare", "@monitor mono|vga", "@memsize KB",
+A test's lines (or --step values) "@hatari bare", "@monitor mono|vga", "@memsize KB",
 "@layout N" (the program built to read window layout N, to show a version
 mismatch), "@protect on" (the floppy write-protected) and "@fault KIND A B"
 (the firmware serves the window as that faulty bus would, MDTEST_FAULT_* in
-common/mdtest.h) set those options.
+common/mdtest.h), "@debug" (the program's debug build, which can override
+the gate), "@protocol N" (the program built to speak protocol N), "@drop N"
+(every Nth command runs unanswered), "@bench TEXT" (an MDTEST.BNC holding
+TEXT) and "@twice" (the program twice in the AUTO folder: quitting the first
+starts it again) set those options.
 
 The run folder, tools/dev/logs/emu/<date>-<setup>-<name>/, keeps
 command.txt, hatari.out, the program's lines (screen.txt), shots/ (end.png
@@ -106,22 +115,38 @@ def stcmd_make(*make_args):
                    cwd=ROOT, stdout=subprocess.DEVNULL)
 
 
-def build_program(layout=None):
-    """MDTEST.TOS, rebuilt when a source is newer; a layout variant in its
-    own folder."""
-    if layout is None:
+def build_program(layout=None, protocol=None, debug=False):
+    """MDTEST.TOS, rebuilt when a source is newer; a variant (another window
+    layout or protocol, the debug build) in its own folder."""
+    if layout is None and protocol is None and not debug:
         stcmd_make()
         return PROGRAM
-    dist = f"dist-layout{layout}"
-    stcmd_make(f"DIST={dist}", f"BUILD=build-layout{layout}",
-               f"EXTRA_CFLAGS=-DPROGRAM_LAYOUT_VERSION={layout}")
-    return ROOT / "app/atarist" / dist / "MDTEST.TOS"
+    name, flags, args = "", [], []
+    if layout is not None:
+        name += f"-layout{layout}"
+        flags.append(f"-DPROGRAM_LAYOUT_VERSION={layout}")
+    if protocol is not None:
+        name += f"-protocol{protocol}"
+        flags.append(f"-DPROGRAM_PROTOCOL_VERSION={protocol}")
+    if debug:
+        name += "-debug"
+        args.append("DEBUG=1")
+    stcmd_make(f"DIST=dist{name}", f"BUILD=build{name}", *args,
+               f"EXTRA_CFLAGS={' '.join(flags)}")
+    return ROOT / "app/atarist" / f"dist{name}" / "MDTEST.TOS"
 
 
-def make_floppy(program, path):
+def make_floppy(program, path, bench=None, twice=False):
     folder = Path(tempfile.mkdtemp(prefix="mdtest-floppy-"))
     (folder / "AUTO").mkdir()
     shutil.copy(program, folder / "AUTO" / "MDTEST.PRG")
+    if twice:
+        # TOS runs the AUTO folder's programs in turn: quitting the first
+        # starts the second, in the memory the first gave back.
+        shutil.copy(program, folder / "AUTO" / "MDTEST2.PRG")
+    if bench is not None:
+        # The program looks for it in the current folder: the root, from AUTO.
+        (folder / "MDTEST.BNC").write_text(bench + "\r\n")
     subprocess.run([str(DEV / "make_floppy.sh"), str(folder), str(path)], check=True,
                    stdout=subprocess.DEVNULL)
     shutil.rmtree(folder)
@@ -284,6 +309,12 @@ class Run:
         self.wait_for(frames, lambda: any(pattern.search(l) for l in self.said()),
                       f"the line /{regex}/")
 
+    def step_sayn(self, count, regex, frames):
+        pattern = re.compile(regex)
+        self.wait_for(frames,
+                      lambda: sum(bool(pattern.search(l)) for l in self.said()) >= int(count),
+                      f"{count} lines /{regex}/")
+
     def step_nosay(self, regex):
         pattern = re.compile(regex)
         found = [l for l in self.said() if pattern.search(l)]
@@ -297,6 +328,12 @@ class Run:
     def step_log(self, regex, frames):
         pattern = re.compile(regex.encode())
         self.wait_for(frames, lambda: pattern.search(self.hatari.output()), f"log /{regex}/")
+
+    def step_request(self, *words):
+        # The bench's next request (MDTEST_REQUEST_*): the firmware reads the
+        # file MDTEST_REQUEST_FILE names, then deletes it.
+        path = self.hatari.out_path.parent / "request.txt"
+        path.write_text(" ".join(words) + "\n")
 
     def step_shot(self, name):
         self.hatari.shot(name)
@@ -325,19 +362,28 @@ def check_floppy(checks, files_dir):
     return results
 
 
-def load_test(name, opts):
+OPTIONS = ("hatari", "monitor", "memsize", "layout", "protect", "fault", "debug",
+           "protocol", "drop", "bench", "twice")
+
+
+def parse_steps(name, lines, opts):
+    """Steps, and "@option value" lines into opts."""
     steps = []
-    for line in (TESTS / f"{name}.steps").read_text().splitlines():
+    for line in lines:
         line = line.strip()
         if line.startswith("@"):
             option, _, value = line[1:].partition(" ")
-            if option not in ("hatari", "monitor", "memsize", "layout", "protect",
-                              "fault"):
-                raise SystemExit(f"{name}.steps: unknown option {line}")
+            if option not in OPTIONS:
+                raise SystemExit(f"{name}: unknown option {line}")
             opts[option] = value.strip()
         elif line and not line.startswith("#"):
             steps.append(line)
     return steps
+
+
+def load_test(name, opts):
+    return parse_steps(f"{name}.steps", (TESTS / f"{name}.steps").read_text().splitlines(),
+                       opts)
 
 
 def hatari_command(setup, opts, run_dir, floppy):
@@ -366,7 +412,7 @@ def run_one(setup, tests, extra_steps, disk, timeout):
     steps = []
     for t in tests:
         steps += load_test(t, opts)
-    steps += extra_steps
+    steps += parse_steps("--step", extra_steps, opts)
     if not steps:
         raise SystemExit("no steps: --test or --step")
     name = "+".join(tests) or "steps"
@@ -379,12 +425,19 @@ def run_one(setup, tests, extra_steps, disk, timeout):
         shutil.copy(disk, floppy)
     else:
         layout = opts.get("layout")
-        make_floppy(build_program(int(layout) if layout else None), floppy)
+        protocol = opts.get("protocol")
+        program = build_program(int(layout) if layout else None,
+                                int(protocol) if protocol else None,
+                                "debug" in opts)
+        make_floppy(program, floppy, opts.get("bench"), "twice" in opts)
     cmd = hatari_command(setup, opts, run_dir, floppy)
     env = dict(os.environ, HOME=str(run_dir / "home"), SDL_VIDEODRIVER="dummy",
                SDL_AUDIODRIVER="dummy")
     if opts.get("fault"):
         env["MDTEST_FAULT"] = opts["fault"]
+    if opts.get("drop"):
+        env["MDTEST_DROP"] = opts["drop"]
+    env["MDTEST_REQUEST_FILE"] = str(run_dir / "request.txt")
     (run_dir / "command.txt").write_text(shlex.join(cmd) + "\n")
     print(f"emu_harness: {setup} {name}: {run_dir.relative_to(ROOT)}", flush=True)
 

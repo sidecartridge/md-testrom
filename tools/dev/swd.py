@@ -117,6 +117,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import ast
 import glob
@@ -1480,13 +1481,11 @@ def cmd_key(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_type(args: argparse.Namespace) -> int:
-    """Type a line, a key at a time, through one OpenOCD: each `swd.py key`
-    starts its own, about a second per key."""
-    elf = matching_elf(args.elf)
-    defs = include_defines()
-    keys = ["space" if c == " " else c for c in args.text]
-    keys += ["return"] * args.enter
+@contextlib.contextmanager
+def held_openocd():
+    """One OpenOCD for a run of many requests (its TCL server, which
+    openocd() then uses): each request otherwise starts its own, about a
+    second each. Reuses one already running."""
     proc = None
     if tcl_server() is None:
         proc = subprocess.Popen(
@@ -1500,8 +1499,7 @@ def cmd_type(args: argparse.Namespace) -> int:
                 raise SwdError("openocd did not start its TCL server")
             time.sleep(0.1)
     try:
-        for key in keys:
-            send_key(elf, defs, key)
+        yield
     finally:
         if proc is not None:
             proc.terminate()
@@ -1509,6 +1507,18 @@ def cmd_type(args: argparse.Namespace) -> int:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proc.kill()
+
+
+def cmd_type(args: argparse.Namespace) -> int:
+    """Type a line, a key at a time, through one OpenOCD: each `swd.py key`
+    starts its own, about a second per key."""
+    elf = matching_elf(args.elf)
+    defs = include_defines()
+    keys = ["space" if c == " " else c for c in args.text]
+    keys += ["return"] * args.enter
+    with held_openocd():
+        for key in keys:
+            send_key(elf, defs, key)
     print(f"typed {len(keys)} keys")
     return 0
 
@@ -1545,6 +1555,48 @@ def cmd_verdict(args: argparse.Namespace) -> int:
     print(f"verdict #{v['count']} (run {v['run']}): {v['verdict']}, class "
           f"{v['class']}, first ${v['first']:06X}, {v['errors']} errors")
     return 0 if v["verdict"] == "PASS" else 3
+
+
+LOG_LINES, LOG_CHARS = 16, 96  # channel.c
+
+
+def channel_log(elf: str) -> tuple[int, list[str]]:
+    """The program's screen as mirrored to the RP (channel.c's channelLog):
+    the total count and the last lines, oldest first."""
+    sym = elf_symbols(elf, "channelLog", "channelLogCount")
+    count = struct.unpack("<I", read_memory(sym["channelLogCount"][0], 4))[0]
+    raw = read_memory(sym["channelLog"][0], LOG_LINES * LOG_CHARS)
+    lines = [raw[i * LOG_CHARS:(i + 1) * LOG_CHARS].split(b"\0")[0]
+             .decode("ascii", errors="replace") for i in range(LOG_LINES)]
+    first = max(0, count - LOG_LINES)
+    return count, [lines[n % LOG_LINES] for n in range(first, count)]
+
+
+def cmd_log(args: argparse.Namespace) -> int:
+    """The last lines of the program's screen, mirrored to the RP."""
+    count, lines = channel_log(matching_elf(args.elf))
+    for n, line in enumerate(lines, count - len(lines) + 1):
+        print(f"{n:6d}  {line}")
+    return 0
+
+
+def post_request(elf: str, code: int, words: list[int]) -> None:
+    """The bench's next request to the program (channel.c's channelRequest):
+    the test and parameters first, the code last."""
+    base = elf_symbols(elf, "channelRequest")["channelRequest"][0]
+    words = (words + [0] * 5)[:5]
+    openocd(*[f"mwh 0x{base + 2 + 2 * i:08x} {w & 0xFFFF}"
+              for i, w in enumerate(words)],
+            f"mwh 0x{base:08x} {code & 0xFFFF}")
+
+
+def cmd_request(args: argparse.Namespace) -> int:
+    """Ask the program in bench mode to do something next."""
+    import mdtest_window
+    code = mdtest_window.layout()["REQUEST_" + args.what.upper()]
+    post_request(matching_elf(args.elf), code, [int(w, 0) for w in args.words])
+    print(f"request {args.what} posted")
+    return 0
 
 
 def cmd_app(args: argparse.Namespace) -> int:
@@ -1944,6 +1996,18 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("words", nargs="*", help="16-bit payload words")
     ap.add_argument("--elf")
     ap.set_defaults(func=cmd_app)
+
+    lg = sub.add_parser("log", help="the program's last screen lines, "
+                        "mirrored to the RP once ROM3 is selected")
+    lg.add_argument("--elf")
+    lg.set_defaults(func=cmd_log)
+
+    rq = sub.add_parser("request", help="the bench's next request to the "
+                        "program (MDTEST.BNC holding 'requests')")
+    rq.add_argument("what", choices=["run", "line_test", "channel_test", "stop"])
+    rq.add_argument("words", nargs="*", help="the test, then its parameters")
+    rq.add_argument("--elf")
+    rq.set_defaults(func=cmd_request)
 
     vd = sub.add_parser("verdict", help="the last line-test verdict the ST "
                         "sent (MDTEST.TOS in bench mode)")

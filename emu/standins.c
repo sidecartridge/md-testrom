@@ -24,6 +24,8 @@ int romemul_initTwoBanks(bool copyFlashToRAM) {
 
 void romemul_stop(void) {}
 void commemul_stop(void) {}
+/* EmuMD's capture never overruns. */
+uint32_t commemul_getOverruns(void) { return 0; }
 
 /* SELECT. EmuMD drops the callbacks the firmware registers, so the bench
  * press does what the firmware's short press does (emul.c): it leaves for

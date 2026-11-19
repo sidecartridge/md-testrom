@@ -119,11 +119,13 @@ target_sources(${PROJECT_NAME} PRIVATE
         aconfig.c
         blink.c
         chandler.c
+        channel.c
         commemul.c
         emul.c
         gconfig.c
         health.c
         hw_config.c
+        jobs.c
         network.c
         reset.c
         romemul.c

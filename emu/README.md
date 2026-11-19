@@ -49,7 +49,13 @@ EmuMD's own `reset.h` (no ARM code) ahead of the firmware's.
 - **ROM3 data.** An ST read of `$FB0000`–`$FBFFFF` reaches the firmware's
   command ring and returns `$FFFF` to the ST, so the ROM3 half of the read
   tests is checked on the device only. ROM4 is served from the same 128 KB
-  window as on the device.
+  window as on the device. Selecting ROM3 as the command channel, its
+  commands and unselecting it all work here (they go through the ring and
+  answer in ROM4); since the line test cannot pass, the tests reach them
+  through the program's debug build: its gate override, or the bench with
+  `MDTEST.BNC` holding `commands`.
+- **Answer timing.** The firmware's main loop runs on a host thread beside
+  the emulator, so an answer now and then comes later than on the device.
 - PIO, DMA and bus timing; the SELECT button and the LED; the real card and
   radio; flash and memory numbers.
 

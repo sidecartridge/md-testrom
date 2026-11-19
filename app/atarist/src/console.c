@@ -113,6 +113,12 @@ static void putScreen(const char *line, void *ctx) {
   Cconws("\r\n");
 }
 
+static void (*mirrorLine)(const char *line);
+
+void console_setMirror(void (*mirror)(const char *line)) {
+  mirrorLine = mirror;
+}
+
 static void emit(const char *text) {
   console_wrap(text, columns, putScreen, 0);
   if (reportCount < REPORT_LINES) {
@@ -125,6 +131,7 @@ static void emit(const char *text) {
     nf_call(nfStderr, text);
     nf_call(nfStderr, "\n");
   }
+  if (mirrorLine) mirrorLine(text);
 }
 
 void console_line(const char *fmt, ...) {

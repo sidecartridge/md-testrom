@@ -12,12 +12,21 @@ const LtSizes lt_long = {1000000UL, 10000UL, 65536UL};
 /* A byte as the 68000 reads it: the even address is the word's high byte. */
 #ifdef __m68k__
 #define READ_BYTE(window, offset) (((const volatile uint8_t *)(window))[offset])
+#define READ_WORD(window, index) ((window)[index])
 #else
+/* The host tests see every read: the byte offset in the window. */
+void (*lt_hostRead)(uint32_t byteOffset);
 static uint8_t hostByte(const volatile uint16_t *window, uint32_t offset) {
+  if (lt_hostRead) lt_hostRead(offset);
   uint16_t w = window[offset >> 1];
   return (uint8_t)((offset & 1) ? (w & 0xFF) : (w >> 8));
 }
+static uint16_t hostWord(const volatile uint16_t *window, uint32_t index) {
+  if (lt_hostRead) lt_hostRead(2UL * index);
+  return window[index];
+}
 #define READ_BYTE(window, offset) hostByte(window, offset)
+#define READ_WORD(window, index) hostWord(window, index)
 #endif
 
 static uint8_t expectedByte(uint32_t offset) {
@@ -32,6 +41,7 @@ static int inHeader(uint32_t index) {
 
 /* A 16-bit xorshift: shifts only (the 68000 has no 32-bit multiply). */
 static uint16_t seed = 0xACE1U;
+void lt_seed(uint16_t value) { seed = value ? value : 0xACE1U; }
 static uint32_t nextRandom(void) {
   seed ^= (uint16_t)(seed << 7);
   seed ^= (uint16_t)(seed >> 9);
@@ -63,7 +73,7 @@ static void irqBack(uint16_t saved) {
 static int checkWord(DgStats *stats, const volatile uint16_t *window,
                      uint32_t index) {
   uint16_t expected = mdtest_patternWord((uint16_t)index);
-  uint16_t read = window[index];
+  uint16_t read = READ_WORD(window, index);
   if (read != expected) {
     dg_wordError(stats, (uint16_t)index, expected, read);
     return 1;
@@ -185,9 +195,9 @@ int lt_run(LtTest test, int bank, const volatile uint16_t *window,
       for (i = 0; i < sizes->paceReads && !stopped; i += 8) {
         uint32_t index = base + (nextRandom() & (MDTEST_BANK_WORDS - 1));
         if (inHeader(index)) continue;
-        uint16_t first = window[index];
+        uint16_t first = READ_WORD(window, index);
         for (int r = 0; r < 7; r++) {
-          uint16_t again = window[index];
+          uint16_t again = READ_WORD(window, index);
           if (again != first) dg_unstable(stats, (uint16_t)index);
         }
         if (first != mdtest_patternWord((uint16_t)index)) {
