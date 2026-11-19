@@ -93,3 +93,11 @@ jobs:
             cat dist/rp.uf2.md5sum
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+    - name: Keep the program for the Atari
+      if: matrix.build_type == 'release'
+      uses: actions/upload-artifact@v4
+      with:
+        name: MDTEST.TOS
+        path: dist/MDTEST.TOS
+        if-no-files-found: error

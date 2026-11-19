@@ -49,8 +49,10 @@ def run(setup: str, frames: int | None, disk: str | None) -> bool:
     cmd = [os.path.join(DEV, "mdfw.sh"), "run", "--headless", "--no-user-config",
            "--frames", str(frames or boot_frames), "--tos", tos_path,
            "--machine", machine, "--screenshot", os.path.join(out, "last.png")]
+    # NatFeats: MDTEST.TOS prints every screen line to the log through it.
+    cmd += ["--", "--natfeats", "yes"]
     if disk:
-        cmd += ["--", "--disk-a", os.path.abspath(disk)]
+        cmd += ["--disk-a", os.path.abspath(disk)]
     with open(log, "w") as f:
         p = subprocess.run(cmd, cwd=REPO, stdout=f, stderr=subprocess.STDOUT,
                            timeout=1800)

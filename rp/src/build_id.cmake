@@ -6,11 +6,7 @@
 #   <sha7>                     clean tree
 #   <sha7>-dirty.<diff7>       uncommitted changes; <diff7> hashes the diff,
 #                              so different changes give different IDs and the
-#                              same tree always gives the same ID. The generated
-#                              target_firmware.h does not count: build.sh
-#                              regenerates it on every build with the build's
-#                              date in its header, and the m68k sources it is
-#                              made from do count
+#                              same tree always gives the same ID
 #   $ENV{RELEASE_BUILD_ID}     when set (for example a source copy outside git);
 #                              cut to 21 characters
 #   nogit                      not a git checkout
@@ -39,7 +35,7 @@ else()
     # Submodules are excluded: rp/build.sh checks them out at pinned tags.
     execute_process(
       COMMAND git diff HEAD --binary --ignore-submodules --
-              . ":(exclude)rp/src/include/target_firmware.h"
+              .
       WORKING_DIRECTORY "${SRC_DIR}/../.."
       OUTPUT_VARIABLE DIFF
       ERROR_QUIET)

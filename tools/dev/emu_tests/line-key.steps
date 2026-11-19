@@ -1,0 +1,7 @@
+# [L] answers; other keys do nothing; [Q] leaves.
+say "^Press a key" 100
+key x
+key l
+say "^SKIP  The line test is not in this build" 200
+key q
+wait 100

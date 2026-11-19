@@ -1,0 +1,12 @@
+# Two reports, two files; each holds the screen, CR LF, 80 columns at most.
+say "^Press a key" 100
+key s
+say "^Report saved as REPORT00.TXT" 500
+key s
+say "^Report saved as REPORT01.TXT" 500
+key q
+wait 100
+floppy REPORT00.TXT "\AMDTEST REPORT 1\r\n"
+floppy REPORT00.TXT "^PASS  The test microfirmware answers\.\r$"
+floppy REPORT01.TXT "^Report saved as REPORT00.TXT\.\r$"
+floppy REPORT01.TXT "\A(?:[^\n]{0,81}\n)*\Z"

@@ -9,8 +9,7 @@
 # and flashes with picotool (or the Debug Probe when picotool cannot see the
 # RP, or with --probe). Then checks over SWD, without the firmware's help, that
 # the RP booted the ELF, that its flash matches the ELF and that it carries the
-# new build ID (tools/dev/swd.py). m68k changes need target/atarist/build.sh
-# first (it regenerates rp/src/include/target_firmware.h).
+# new build ID (tools/dev/swd.py).
 #
 # Environment: APP_UUID_KEY (default: the development UUID), OPENOCD and
 # PICO_OPENOCD_PATH (see swd.py), RELEASE_DATE (default: the date of the HEAD

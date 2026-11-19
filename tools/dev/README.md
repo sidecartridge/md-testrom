@@ -21,7 +21,7 @@ to their source as this firmware allows, so a fix travels both ways with a plain
 | File | Source | Commit |
 | --- | --- | --- |
 | `console.py`, `flash.sh`, `swd.py`, `stackdepth.py`, `measure_builds.sh`, `tools_harness.py`, `select_harness.py`, `gdb/`, this README's sections from "Firmware support" on | md-rom-emulator (the template's tools, adapted there to a 128 KB two-bank window) | `3cd573d` |
-| `build_hatari_fork.sh`, `hatari_fork.cmake`, `mdfw.sh`, `emu_harness.py` | md-printer-emulator | `e81bcbc` |
+| `build_hatari_fork.sh`, `hatari_fork.cmake`, `mdfw.sh`, `emu_harness.py` (rewritten since) | md-printer-emulator | `e81bcbc` |
 | `make_floppy.sh` | md-printer-emulator | `687affb` |
 | `emu_check.py` | this repository | |
 | `make_floppy_image.py` | md-drives-emulator | `002fbc8` |
@@ -62,7 +62,7 @@ What differs here:
 3. `tools/dev/flash.sh debug --probe` (or `release`): builds, flashes, verifies, reads the build ID.
    Only with the ST idle at the desktop: a flash while a program reads the cartridge crashes the
    ST (four bombs), even with the bus buffers forced inactive first.
-4. `python3 tools/dev/swd.py window target/atarist/TESTROM.BIN`, `heap`, `stack paint|peak`,
+4. `python3 tools/dev/swd.py window --pattern`, `heap`, `stack paint|peak`,
    `crash`.
 5. A step that ends in Booster (`select_harness.py short`) ends the session. Never probe Booster.
 
@@ -96,8 +96,12 @@ python3 tools/dev/emu_check.py --disk-a disk.st --frames 3000 st-104
 
 `emu_check.py` passes a setup when the firmware's log shows the test image verified in the
 window and the main loop running, and keeps the log and a screenshot of the last frame in
-`tools/dev/logs/emu/<setup>/`. `emu_harness.py` (md-printer-emulator's, kept as it is) drives a
-setup terminal this firmware does not have; it is for the Atari program's screens.
+`tools/dev/logs/emu/<setup>/`. `emu_harness.py` (rewritten from md-printer-emulator's for this program) runs
+`MDTEST.TOS` from a floppy's AUTO folder against the firmware, or with nothing in the port
+(`@hatari bare`), on the ST (TOS 1.04, 512 KB), STE, Mega STE, TT and Falcon setups. The program
+prints every line it shows through NatFeats (`MDTEST: <line>` in `hatari.out`); the steps in
+`tools/dev/emu_tests/*.steps` press keys, wait for lines, and check the files it saves on the
+floppy once Hatari has stopped. `--all` runs every test on every setup.
 
 The sections below are md-rom-emulator's, kept for each tool's options. Where they mention a
 setup menu, a ROM, a catalog or v2.1.2, read them with the differences above.
@@ -153,9 +157,8 @@ Builds out of tree in `tools/dev/builds/<type>`, incrementally, the profile rele
 HTTPS downloads; `APP_DOWNLOAD_HTTPS=0` builds HTTP only, in `tools/dev/builds/<type>-http`). It does not touch `rp/build` or
 the submodules, and warns when a submodule is not at the version `rp/build.sh` pins. It builds
 with the same CMake build type as `rp/build.sh` (Release; `RP_CMAKE_BUILD_TYPE` overrides it,
-with a warning, in a folder of its own). The m68k
-image is not rebuilt: after changing `target/atarist`, run `target/atarist/build.sh` first (it
-regenerates `rp/src/include/target_firmware.h`), then `flash.sh`.
+with a warning, in a folder of its own). The window's
+contents come from `common/mdtest.c`, compiled in: nothing to regenerate.
 
 Every build carries a build ID: the git commit, `<sha7>`, or `<sha7>-dirty.<diff7>` when the tree
 has uncommitted changes, followed by `+debug` in a debug build, so a debug and a release build of one

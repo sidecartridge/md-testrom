@@ -78,3 +78,7 @@ emu/sd/
 
 # Copied from version.txt by build.sh
 app/atarist/version.txt
+
+# The EmuMD harness's program variants (a different window layout)
+app/atarist/dist-*/
+app/atarist/build-*/
