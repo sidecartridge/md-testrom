@@ -1,0 +1,15 @@
+# The controller does not start: the advice points at Wi-Fi to tell
+# the chip's halves apart.
+@btfail
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key t
+say "^Starting the Bluetooth controller" 100
+say "^FAIL  The Bluetooth controller does not start" 600
+say "^  controller failed" 100
+say "^Run the Wi-Fi test" 100
+nosay "^Listening for"

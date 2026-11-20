@@ -150,7 +150,8 @@
 #define T_SAVE_FAILED_DETAIL "  %s: GEMDOS error %ld"
 #define T_SAVE_ADVICE "Check the disk is not write-protected or full."
 #define T_SAVE_NONAME "  no free name REPORT00.TXT to REPORT99.TXT"
-#define T_SAVE_ASK_NAMES "Keep Wi-Fi network names in the report? [Y/N]"
+#define T_SAVE_ASK_NAMES \
+  "Keep the Wi-Fi and Bluetooth names heard in the report? [Y/N]"
 #define T_SAVE_NAMES_KEPT "  names kept"
 #define T_SAVE_NAMES_LEFT_OUT "  names left out"
 #define T_NETWORK_LEFT_OUT "(name left out)"
@@ -209,6 +210,7 @@
 #define T_MENU_CARD "[D] microSD card"
 #define T_MENU_CARD_SWAP "[R] microSD card out and back in"
 #define T_MENU_WIFI "[W] Wi-Fi"
+#define T_MENU_BT "[T] Bluetooth"
 #define T_MENU_EXIT "[B] Back to Booster"
 #define T_YES "yes"
 #define T_NO "no"
@@ -370,6 +372,32 @@
   "card test to see why it does not answer."
 #define T_SWAP_UNUSABLE "FAIL  The card came back but cannot be used."
 #define T_SWAP_UNUSABLE_ADVICE "Run the microSD card test to see why."
+
+#define T_BT_TITLE "Bluetooth"
+#define T_BT_STARTING "Starting the Bluetooth controller..."
+#define T_BT_CLASSIC "Listening for Bluetooth devices (%u s)..."
+#define T_BT_LE "Listening for low-energy devices (%u s)..."
+#define T_BT_CONTROLLER "  Bluetooth %s, address %s, started in %s ms"
+#define T_BT_FIRMWARE "  Firmware  %s, maker %s"
+#define T_BT_HEARD "  Devices   %s%s heard: %s classic, %s low energy"
+#define T_BT_DEVICE "  %4s dBm %-7s %s %s"
+#define T_BT_PASS "PASS  Bluetooth works."
+#define T_BT_NOTHING "WARN  No Bluetooth device was heard."
+#define T_BT_NOTHING_ADVICE \
+  "Make a phone nearby visible in its Bluetooth settings, then test again."
+#define T_BT_CHIP_FAIL "FAIL  The radio chip does not answer."
+#define T_BT_CHIP_FAIL_DETAIL "  error %s when started"
+#define T_BT_CHIP_FAIL_ADVICE \
+  "Switch the computer off and on; if it stays silent, the Pico W's radio " \
+  "is faulty."
+#define T_BT_START_FAIL "FAIL  The Bluetooth controller does not start."
+#define T_BT_START_FAIL_DETAIL "  %s"
+#define T_BT_START_FAIL_ADVICE \
+  "Run the Wi-Fi test: if it works, the chip's Bluetooth side is faulty."
+#define T_BT_SCAN_FAIL "FAIL  The Bluetooth controller cannot scan."
+#define T_BT_SCAN_FAIL_DETAIL "  %s, error %s"
+#define T_BT_SCAN_FAIL_ADVICE \
+  "Test again; if it keeps failing, the chip's Bluetooth side is faulty."
 
 #define T_WIFI_TITLE "Wi-Fi"
 #define T_WIFI_CHIP "Starting the radio chip..."

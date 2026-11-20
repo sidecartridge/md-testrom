@@ -22,6 +22,9 @@ void devscreen_cardSwap(void);
 /* The Wi-Fi test, step by step to the first that fails. */
 void devscreen_wifi(void);
 
+/* Bluetooth: the controller, then the devices it hears. */
+void devscreen_bluetooth(void);
+
 int devscreen_exit(long mch);
 
 #endif

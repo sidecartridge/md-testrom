@@ -89,6 +89,26 @@ uint16_t wifitest_step(uint32_t nowMs, uint16_t *progress,
 
 void wifitest_abort(void) { wifiAborts++; }
 
+// The Bluetooth test, the same way (bttest.c runs under EmuMD).
+static int btBegun;
+static int btAborts;
+
+void bttest_begin(uint32_t nowMs) {
+  (void)nowMs;
+  btBegun++;
+}
+
+uint16_t bttest_step(uint32_t nowMs, uint16_t *progress,
+                     uint16_t live[MDTEST_JOB_LIVE_WORDS]) {
+  (void)nowMs;
+  (void)live;
+  *progress = 100;
+  jobs_resultLine("bt=ok");
+  return MDTEST_JOB_DONE;
+}
+
+void bttest_abort(void) { btAborts++; }
+
 static int resultHas(const char *line) {
   const JobStatus *s = jobs_status();
   size_t n = strlen(line);
@@ -324,6 +344,20 @@ static void wifi(void) {
            MDTEST_STATUS_UNKNOWN);
 }
 
+static void bluetooth(void) {
+  jobs_reset();
+  btBegun = 0;
+  start(MDTEST_TEST_BLUETOOTH, 0, 0);
+  CHECK_EQ(btBegun, 1);
+  jobs_poll(1);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_DONE);
+  CHECK(resultHas("bt=ok"));
+  btAborts = 0;
+  start(MDTEST_TEST_BLUETOOTH, 0, 10);
+  jobs_cancel();
+  CHECK_EQ(btAborts, 1);
+}
+
 static const uint16_t twoSeconds[4] = {2, 0, 0, 0};
 
 static void jobs(void) {
@@ -424,6 +458,7 @@ int main(void) {
   deviceInfo();
   card();
   wifi();
+  bluetooth();
   text();
   restore();
   versions();

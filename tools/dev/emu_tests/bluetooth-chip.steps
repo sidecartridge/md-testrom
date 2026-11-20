@@ -1,0 +1,12 @@
+# The radio chip does not start: Bluetooth stops at its first step.
+@chipfail
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key t
+say "^Starting the Bluetooth controller" 100
+say "^FAIL  The radio chip does not answer" 600
+nosay "^Listening for"

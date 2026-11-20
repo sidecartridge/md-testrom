@@ -16,6 +16,9 @@
 #define LED_POLL_TICKS 20UL
 #define CARD_POLL_TICKS 20UL
 #define WIFI_POLL_TICKS 20UL
+#define BT_POLL_TICKS 20UL
+#define BT_BROADCOM 15L
+#define BT_CYPRESS 305L
 #define WIFI_WEAK_DBM (-70L)
 /* A card slower than this, writing or reading, gets a warning. */
 #define CARD_SLOW_KBS 100L
@@ -613,5 +616,96 @@ void devscreen_wifi(void) {
     console_line(T_WIFI_STATIC);
     console_line(T_WIFI_STATIC_DETAIL, value("static_reason"));
     console_line(T_WIFI_STATIC_ADVICE);
+  }
+}
+
+/* The Bluetooth test's live view: each step as it begins. */
+static unsigned short btPhase;
+
+static int btWatch(const CmdAnswer *a) {
+  unsigned short phase = a->data[MDTEST_JOB_ANS_LIVE];
+  while (btPhase < phase) {
+    btPhase++;
+    if (btPhase == MDTEST_BT_PHASE_CLASSIC) {
+      console_line(T_BT_CLASSIC, (unsigned)MDTEST_BT_CLASSIC_SECONDS);
+    }
+    if (btPhase == MDTEST_BT_PHASE_LE) {
+      console_line(T_BT_LE, (unsigned)MDTEST_BT_LE_SECONDS);
+    }
+  }
+  return 0;
+}
+
+/* dev=RSSI|KIND|ADDRESS|NAME lines, the strongest first. */
+static void btDevices(void) {
+  for (const char *line = text; *line;) {
+    const char *end = strchr(line, '\n');
+    size_t n = end ? (size_t)(end - line) : strlen(line);
+    if (strncmp(line, "dev=", 4) == 0 && n < 80) {
+      char copy[80];
+      memcpy(copy, line + 4, n - 4);
+      copy[n - 4] = '\0';
+      char *field[4] = {copy, 0, 0, 0};
+      for (int i = 1; i < 4; i++) {
+        field[i] = strchr(field[i - 1], '|');
+        if (!field[i]) break;
+        *field[i]++ = '\0';
+      }
+      if (field[3]) {
+        console_privateLine(field[3], T_BT_DEVICE, field[0], field[1],
+                            field[2], field[3]);
+      }
+    }
+    if (!end) break;
+    line = end + 1;
+  }
+}
+
+void devscreen_bluetooth(void) {
+  console_blank();
+  console_line(T_BT_TITLE);
+  console_line(T_BT_STARTING);
+  btPhase = MDTEST_BT_PHASE_START;
+  int state = chscreen_run(MDTEST_TEST_BLUETOOTH, noParams, BT_POLL_TICKS,
+                           btWatch, text);
+  if (state < 0) return;
+  if (chscreen_valueIs(text, "bt", "ok")) {
+    console_line(T_BT_CONTROLLER, value("version"), value("address"),
+                 value("start_ms"));
+    long maker = atol(value("manufacturer"));
+    console_line(T_BT_FIRMWARE, value("firmware"),
+                 maker == BT_BROADCOM  ? "Broadcom"
+                 : maker == BT_CYPRESS ? "Cypress"
+                                       : value("manufacturer"));
+  }
+  if (has("devices")) {
+    console_line(T_BT_HEARD, value("devices"),
+                 chscreen_valueIs(text, "devices_more", "yes") ? " or more" : "",
+                 value("classic"), value("le"));
+    btDevices();
+  }
+  console_blank();
+  if (state == MDTEST_JOB_DONE) {
+    console_line(T_BT_PASS);
+    if (chscreen_valueIs(text, "devices", "0")) {
+      console_line(T_BT_NOTHING);
+      console_line(T_BT_NOTHING_ADVICE);
+    }
+  } else if (chscreen_valueIs(text, "error", "chip silent")) {
+    console_line(T_BT_CHIP_FAIL);
+    console_line(T_BT_CHIP_FAIL_DETAIL, value("chip_error"));
+    console_line(T_BT_CHIP_FAIL_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "controller silent") ||
+             chscreen_valueIs(text, "error", "controller failed")) {
+    console_line(T_BT_START_FAIL);
+    console_line(T_BT_START_FAIL_DETAIL, value("error"));
+    console_line(T_BT_START_FAIL_ADVICE);
+  } else if (state == MDTEST_JOB_FAILED) {
+    console_line(T_BT_SCAN_FAIL);
+    console_line(T_BT_SCAN_FAIL_DETAIL, value("error"),
+                 has("scan_error") ? value("scan_error") : "-");
+    console_line(T_BT_SCAN_FAIL_ADVICE);
+  } else {
+    console_line(T_JOB_FAILED, MDTEST_TEST_BLUETOOTH);
   }
 }

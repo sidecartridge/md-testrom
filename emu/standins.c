@@ -105,6 +105,94 @@ bool cardhw_present(void) { return emuCardIn(); }
 
 void cardhw_stop(void) {}
 
+/* Bluetooth: EmuMD has no bare BTstack, so the controller is this stand-in.
+ * It starts 300 ms after it is asked, as Cypress (company 305) with
+ * Bluetooth 5.1, and a scan hears three devices: a classic one with a name,
+ * a low-energy one with a name and one without. EMU_BT_FAIL in the
+ * environment makes the controller fail to start, EMU_BT_NONE makes the
+ * scans hear nothing; the radio chip fails as the LED test's does
+ * (MDTEST_CHIP_FAIL). */
+#include "bthw.h"
+#include "devtests.h"
+
+#define EMU_BT_START_US 300000u
+#define EMU_BT_CYPRESS 305u
+#define EMU_BT_HCI_5_1 10u
+#define EMU_BT_SUBVERSION 0x2257u
+
+static int emuBtState = BTHW_OFF;
+static uint32_t emuBtAskedUs;
+static BtHwDeviceSeen emuBtSeen;
+static bool emuBtScanning;
+
+int bthw_start(BtHwDeviceSeen seen) {
+  if (devtestsChipFails) return -1;
+  emuBtSeen = seen;
+  emuBtAskedUs = time_us_32();
+  emuBtState = BTHW_STARTING;
+  return 0;
+}
+
+int bthw_state(void) {
+  if (emuBtState == BTHW_STARTING &&
+      time_us_32() - emuBtAskedUs >= EMU_BT_START_US) {
+    emuBtState = getenv("EMU_BT_FAIL") ? BTHW_FAILED : BTHW_WORKING;
+  }
+  return emuBtState;
+}
+
+void bthw_info(BtHwInfo *info) {
+  static const uint8_t address[BTHW_ADDRESS_BYTES] = {0x28, 0xCD, 0xC1,
+                                                      0x4D, 0x44, 0x02};
+  memset(info, 0, sizeof(*info));
+  memcpy(info->address, address, sizeof(address));
+  info->hciVersion = EMU_BT_HCI_5_1;
+  info->lmpSubversion = EMU_BT_SUBVERSION;
+  info->manufacturer = EMU_BT_CYPRESS;
+}
+
+static void emuBtHear(const uint8_t last, int8_t rssi, uint8_t kind,
+                      const char *name) {
+  BtHwDevice device;
+  memset(&device, 0, sizeof(device));
+  static const uint8_t base[BTHW_ADDRESS_BYTES - 1] = {0xE0, 0x4D, 0x44,
+                                                       0x45, 0x4D};
+  memcpy(device.address, base, sizeof(base));
+  device.address[BTHW_ADDRESS_BYTES - 1] = last;
+  device.rssi = rssi;
+  device.kind = kind;
+  snprintf(device.name, sizeof(device.name), "%s", name);
+  if (emuBtSeen) emuBtSeen(&device);
+}
+
+int bthw_scan(bool classic, uint32_t seconds) {
+  (void)seconds;
+  if (emuBtState != BTHW_WORKING) return -1;
+  if (!getenv("EMU_BT_NONE")) {
+    if (classic) {
+      emuBtHear(0x01, -58, BTHW_KIND_CLASSIC, "EmuMD Phone");
+    } else {
+      emuBtHear(0x02, -71, BTHW_KIND_LE, "EmuMD Tag");
+      emuBtHear(0x03, -88, BTHW_KIND_LE, "");
+      emuBtHear(0x02, -66, BTHW_KIND_LE, "");  /* heard again, stronger */
+    }
+  }
+  /* A classic inquiry ends by itself; a low-energy scan runs until
+   * stopped. */
+  emuBtScanning = !classic;
+  return 0;
+}
+
+bool bthw_scanning(void) { return emuBtScanning; }
+
+void bthw_scanStop(void) { emuBtScanning = false; }
+
+void bthw_stop(void) {
+  emuBtSeen = NULL;
+  emuBtScanning = false;
+  emuBtState = BTHW_OFF;
+}
+
 /* health.c records why the RP restarted from the RP2040's watchdog, fault
  * handlers and SCB, none of which EmuMD has: a restart there is a new run. */
 #include "health.h"

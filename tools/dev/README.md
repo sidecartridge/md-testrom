@@ -118,7 +118,8 @@ the microSD card fail (`MDTEST_CARD_FAULT`: 1 no answer, 2 full, 3 a write fails
 back differs), `@sdapps` puts Booster's apps folder on it, `card out` and `card in` take it out and
 put it back, and `sdsame` checks at the end that the card's folder (a `USER.TXT` of the user's,
 always) holds what it held before the run. `@wifi HOW` makes EmuMD's Wi-Fi fail (`badauth`,
-`nonet`, `fail`, `off`), `@rssi DBM` sets its signal, and `floppynot NAME REGEX` checks a saved
+`nonet`, `fail`, `off`), `@rssi DBM` sets its signal, `@btfail` and `@btnone` make the Bluetooth stand-in's controller
+fail or its scan hear nothing, and `floppynot NAME REGEX` checks a saved
 file does not hold something (a network's name in a report).
 
 The command channel, with no ST: `job.py run dummy 2 --expect seconds=2` selects ROM3 through
@@ -133,6 +134,8 @@ SELECT within 10 s), `job.py run led 1` (on; 0 off, 2 blink, 3 off and the chip 
 sd_swap 30` (take the card out and put it back within 30 s each); `swd.py app card_fault N` makes
 the card fail as `@cardfault N` does. `job.py run wifi` runs the Wi-Fi test to the web server;
 `swd.py app chip_fail 1` makes it stop at the chip.
+`job.py run bluetooth` starts the controller and scans (about 14 s); `chip_fail` stops it at the
+chip too.
 
 On the device, `swd.py verdict` reads the last line-test verdict the ST sent, and
 `bus_faults.py` serves each fault in turn (`swd.py app fault`) while `MDTEST.TOS` runs in bench
