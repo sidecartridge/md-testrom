@@ -14,7 +14,7 @@ say "^WARN  The signal is weak" 100
 say "^  -75 dBm" 100
 sayn 3 "^Press a key" 300
 key s
-say "^Keep Wi-Fi network names in the report" 100
+say "^Keep the Wi-Fi and Bluetooth names heard in the report" 100
 key y
 say "^  names kept" 100
 say "^Report saved as REPORT00.TXT" 500

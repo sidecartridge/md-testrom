@@ -118,6 +118,9 @@ pico_generate_pio_header(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/commemul.pio)
 target_sources(${PROJECT_NAME} PRIVATE
         aconfig.c
         blink.c
+        btstack_cyw43_no_flash.c
+        bthw.c
+        bttest.c
         cardhw.c
         cardtest.c
         wifitest.c
@@ -162,6 +165,13 @@ if (PICO_CYW43_SUPPORTED)
     target_link_libraries(${PROJECT_NAME} PRIVATE
         pico_cyw43_arch_lwip_poll
 #        pico_cyw43_arch_lwip_threadsafe_background
+        # Bluetooth for its test: the scan, classic and low energy. Not
+        # pico_btstack_cyw43: btstack_cyw43_no_flash.c starts BTstack
+        # without the SDK's flash-backed key store.
+        pico_btstack_ble
+        pico_btstack_classic
+        pico_btstack_hci_transport_cyw43
+        pico_btstack_run_loop_async_context
         )
 else()
     message(WARNING "CYW43 architecture not supported")

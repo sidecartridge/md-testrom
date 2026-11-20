@@ -25,7 +25,7 @@ say "^PASS  Wi-Fi works, out to the internet" 100
 nosay "^WARN  (The signal|Booster.s fixed|No network)"
 sayn 3 "^Press a key" 300
 key s
-say "^Keep Wi-Fi network names in the report" 100
+say "^Keep the Wi-Fi and Bluetooth names heard in the report" 100
 key n
 say "^  names left out" 100
 say "^Report saved as REPORT00.TXT" 500

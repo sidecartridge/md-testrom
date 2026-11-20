@@ -194,10 +194,11 @@
 #define MDTEST_CAP_SD_CARD 0x00000020UL
 #define MDTEST_CAP_SD_SWAP 0x00000040UL
 #define MDTEST_CAP_WIFI 0x00000080UL
+#define MDTEST_CAP_BLUETOOTH 0x00000100UL
 #define MDTEST_CAPS                                                     \
   (MDTEST_CAP_DUMMY | MDTEST_CAP_DEVICE_INFO | MDTEST_CAP_SELECT |      \
    MDTEST_CAP_LED | MDTEST_CAP_EXIT | MDTEST_CAP_SD_CARD |              \
-   MDTEST_CAP_SD_SWAP | MDTEST_CAP_WIFI)
+   MDTEST_CAP_SD_SWAP | MDTEST_CAP_WIFI | MDTEST_CAP_BLUETOOTH)
 
 // The tests a job runs.
 #define MDTEST_TEST_DUMMY 1U  // parameters: seconds; result: seconds, steps
@@ -264,7 +265,20 @@
 #define MDTEST_WIFI_PHASE_DNS 5U
 #define MDTEST_WIFI_PHASE_WEB 6U
 #define MDTEST_WIFI_PHASES 7U
-#define MDTEST_TEST_LAST MDTEST_TEST_WIFI
+// Bluetooth: the controller in the radio chip started (its address and
+// version), then a scan of a fixed length, classic inquiry and low energy
+// one after the other. Nothing is paired or kept. Live words: the phase
+// (MDTEST_BT_PHASE_*), the devices heard, the seconds in the phase.
+#define MDTEST_TEST_BLUETOOTH 8U
+#define MDTEST_BT_CLASSIC_SECONDS 7U  // rounded up to 1.28 s units: 7.7 s
+#define MDTEST_BT_LE_SECONDS 5U
+#define MDTEST_BT_DEVICES_LISTED 8U  // the strongest, in the result
+#define MDTEST_BT_PHASE_CHIP 0U
+#define MDTEST_BT_PHASE_START 1U
+#define MDTEST_BT_PHASE_CLASSIC 2U
+#define MDTEST_BT_PHASE_LE 3U
+#define MDTEST_BT_PHASES 4U
+#define MDTEST_TEST_LAST MDTEST_TEST_BLUETOOTH
 
 // A job's status answer: MDTEST_ANS_DATA + these words.
 #define MDTEST_JOB_ANS_NUMBER 0U

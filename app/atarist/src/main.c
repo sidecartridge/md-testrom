@@ -125,6 +125,7 @@ static void showMenu(int lineTestReady) {
     console_line(T_MENU_CARD);
     console_line(T_MENU_CARD_SWAP);
     console_line(T_MENU_WIFI);
+    console_line(T_MENU_BT);
   } else if (linePassed) {
     console_line(T_MENU_LOCKED1);
     console_line(T_MENU_CHANNEL_NEXT);
@@ -318,7 +319,7 @@ static void run(void) {
     } else if (key == 'c' && (linePassed || overridden)) {
       channelTest();
     } else if (unlocked && (key == 'i' || key == 'p' || key == 'g' ||
-                            key == 'd' || key == 'r' || key == 'w')) {
+                            key == 'd' || key == 'r' || key == 'w' || key == 't')) {
       console_blank();
       if (chscreen_open(machine.mch)) {
         if (key == 'i') devscreen_info();
@@ -327,6 +328,7 @@ static void run(void) {
         if (key == 'd') devscreen_card();
         if (key == 'r') devscreen_cardSwap();
         if (key == 'w') devscreen_wifi();
+        if (key == 't') devscreen_bluetooth();
       }
     } else if (key == 'b' && device.kind == DEVICE_TEST) {
       if (devscreen_exit(machine.mch)) {
