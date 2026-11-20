@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cardtest.h"
 #include "devtests.h"
 
 #define PROGRESS_DONE 100U
@@ -256,7 +257,7 @@ uint16_t jobs_start(uint16_t test, uint16_t seq, const uint16_t p[4],
     *number = status.number;
     return MDTEST_STATUS_BUSY;
   }
-  if (test < MDTEST_TEST_DUMMY || test > MDTEST_TEST_LED) {
+  if (test < MDTEST_TEST_DUMMY || test > MDTEST_TEST_LAST) {
     *number = 0;
     return MDTEST_STATUS_UNKNOWN;
   }
@@ -272,12 +273,19 @@ uint16_t jobs_start(uint16_t test, uint16_t seq, const uint16_t p[4],
   seqValid = 1;
   startedMs = nowMs;
   steps = 0;
+  if (test == MDTEST_TEST_SD_CARD || test == MDTEST_TEST_SD_SWAP) {
+    cardtest_begin(test, params, nowMs);
+  }
   *number = status.number;
   return MDTEST_STATUS_OK;
 }
 
 void jobs_cancel(void) {
   if (status.state != MDTEST_JOB_RUNNING) return;
+  if (status.test == MDTEST_TEST_SD_CARD ||
+      status.test == MDTEST_TEST_SD_SWAP) {
+    cardtest_abort();
+  }
   resultLine("cancelled=yes");
   finish(MDTEST_JOB_CANCELLED);
 }
@@ -300,6 +308,12 @@ void jobs_poll(uint32_t nowMs) {
     case MDTEST_TEST_LED:
       ledStep(nowMs);
       break;
+    case MDTEST_TEST_SD_CARD:
+    case MDTEST_TEST_SD_SWAP: {
+      uint16_t state = cardtest_step(nowMs, &status.progress, status.live);
+      if (state != MDTEST_JOB_RUNNING) finish(state);
+      break;
+    }
     default:
       resultLine("error=unknown test");
       finish(MDTEST_JOB_FAILED);

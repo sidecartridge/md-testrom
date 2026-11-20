@@ -1,0 +1,16 @@
+# The card taken out and put back: each step asked for as it comes.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key r
+say "^Take the microSD card out of the device" 500
+card out
+say "^  The card is out" 500
+say "^Put the card back in" 100
+card in
+say "^  A card is in; starting it" 500
+say "^PASS  The slot sees a card leave and come back" 500
+sdsame

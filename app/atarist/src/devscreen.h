@@ -12,6 +12,13 @@ void devscreen_led(void);
 
 /* Ask the device to leave for Booster: 1 when it is on its way (the
  * cartridge port is then Booster's, and the program must not read it). */
+/* The microSD card: started, described, one file written, read back and
+ * deleted. */
+void devscreen_card(void);
+
+/* The microSD card taken out and put back. */
+void devscreen_cardSwap(void);
+
 int devscreen_exit(long mch);
 
 #endif

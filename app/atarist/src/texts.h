@@ -202,6 +202,8 @@
 #define T_MENU_INFO "[I] Device information"
 #define T_MENU_SELECT "[P] SELECT button"
 #define T_MENU_LED "[G] Green LED"
+#define T_MENU_CARD "[D] microSD card"
+#define T_MENU_CARD_SWAP "[R] microSD card out and back in"
 #define T_MENU_EXIT "[B] Back to Booster"
 #define T_YES "yes"
 #define T_NO "no"
@@ -286,6 +288,83 @@
 #define T_LED_CHIP_ERROR_DETAIL "  %s, error %s"
 #define T_LED_CHIP_ERROR_ADVICE \
   "The Pico W's radio chip is faulty: Wi-Fi and Bluetooth may fail too."
+
+#define T_CARD_TITLE "microSD card"
+#define T_CARD_ASK \
+  "Starting the card, then writing, reading back and deleting one file."
+#define T_CARD_TYPE "  Card      %s, %s MB, bus %s kHz"
+#define T_CARD_MAKER "  Maker     %s %s %s, rev %s, made %s"
+#define T_CARD_SERIAL "  Serial    %s, started in %s ms"
+#define T_CARD_FORMAT "  Format    %s, %s MB, %s MB free"
+#define T_CARD_LABEL "  Label     %s"
+#define T_CARD_APPS_FOUND "  Booster's apps folder is on the card."
+#define T_CARD_APPS_MISSING "  Booster's apps folder is not on the card."
+#define T_CARD_WRITING "  Writing the test file %s..."
+#define T_CARD_READING "  Reading it back..."
+#define T_CARD_SPEED "  Write     %s KB/s, read %s KB/s"
+#define T_CARD_PASS "PASS  The microSD card works."
+#define T_CARD_NONE "FAIL  No microSD card answers."
+#define T_CARD_NONE_DETAIL "  none in the slot, or it does not answer"
+#define T_CARD_NONE_ADVICE \
+  "Push a card fully into the slot and test again; if one is in, try " \
+  "another card: if none answers, the slot is faulty."
+#define T_CARD_OLD "FAIL  The card is too old for the device."
+#define T_CARD_OLD_DETAIL "  a standard-capacity card (2 GB or less)"
+#define T_CARD_OLD_ADVICE "Use an SDHC or SDXC card."
+#define T_CARD_START "FAIL  The card answered, then failed to start."
+#define T_CARD_START_ADVICE \
+  "Try another card; if every card fails, the slot or its wiring is faulty."
+#define T_CARD_NO_FS "FAIL  The card has no filesystem the device reads."
+#define T_CARD_FS_DETAIL "  filesystem error %s"
+#define T_CARD_NO_FS_ADVICE \
+  "Format it as FAT32 or exFAT on a computer (this erases it), then test " \
+  "again."
+#define T_CARD_BAD_FS "FAIL  The card's filesystem cannot be read."
+#define T_CARD_BAD_FS_ADVICE \
+  "Check the card on a computer: it may be damaged. Then try another card."
+#define T_CARD_FULL "FAIL  The card is full."
+#define T_CARD_FULL_DETAIL "  %s MB free; the test needs %u KB"
+#define T_CARD_FULL_ADVICE "Free some space on the card, then test again."
+#define T_CARD_LOCKED "FAIL  The card refuses to be written."
+#define T_CARD_LOCKED_DETAIL "  write protected"
+#define T_CARD_LOCKED_ADVICE \
+  "The card is locked or worn out: try another card."
+#define T_CARD_WRITE "FAIL  Writing the test file failed."
+#define T_CARD_WRITE_DETAIL "  %s, after %s KB, error %s"
+#define T_CARD_WRITE_ADVICE \
+  "Try another card; if every card fails, the slot or its wiring is faulty."
+#define T_CARD_DIFFERS "FAIL  The card gave back other data than written."
+#define T_CARD_DIFFERS_DETAIL "  at byte %s: read %s, written %s"
+#define T_CARD_DIFFERS_ADVICE \
+  "The card or the slot's wiring corrupts data: try another card; if " \
+  "every card fails, the slot is faulty."
+#define T_CARD_LEFT "WARN  The test file could not be deleted."
+#define T_CARD_LEFT_DETAIL "  delete %s from the card on a computer"
+#define T_CARD_SLOW "WARN  The card is slow."
+#define T_CARD_SLOW_DETAIL "  under %u KB/s"
+#define T_CARD_SLOW_ADVICE \
+  "Apps will load slowly from it; a faster card is better."
+
+#define T_SWAP_TITLE "microSD card out and back in"
+#define T_SWAP_LOOKING "Looking for the card..."
+#define T_SWAP_OUT "Take the microSD card out of the device (%u s)."
+#define T_SWAP_EMPTY "  No card in the slot."
+#define T_SWAP_IS_OUT "  The card is out."
+#define T_SWAP_IN "Put the card back in (%u s)."
+#define T_SWAP_IN_FIRST "Put a microSD card in (%u s)."
+#define T_SWAP_BACK "  A card is in; starting it."
+#define T_SWAP_PASS "PASS  The slot sees a card leave and come back."
+#define T_SWAP_NOT_OUT "FAIL  The card was not seen leaving."
+#define T_SWAP_WAITED "  waited %u s"
+#define T_SWAP_NOT_OUT_ADVICE \
+  "Take the card fully out and test again; if it was out, the slot may " \
+  "be faulty."
+#define T_SWAP_NOT_IN "FAIL  No card was seen coming in."
+#define T_SWAP_NOT_IN_ADVICE \
+  "Push the card fully in and test again; if it is in, run the microSD " \
+  "card test to see why it does not answer."
+#define T_SWAP_UNUSABLE "FAIL  The card came back but cannot be used."
+#define T_SWAP_UNUSABLE_ADVICE "Run the microSD card test to see why."
 
 #define T_EXIT_TITLE "Back to Booster"
 #define T_EXIT_DONE "The device is restarting into Booster."

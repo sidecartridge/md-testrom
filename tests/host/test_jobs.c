@@ -6,6 +6,7 @@
  * (common/mdtest.h). */
 #include <string.h>
 
+#include "cardtest.h"
 #include "devtests.h"
 #include "jobs.h"
 #include "mdtest.h"
@@ -35,6 +36,34 @@ int devtests_ledSet(bool on) {
 }
 void devtests_ledRelease(void) { released++; }
 void devtests_poll(void) {}
+
+// The card tests: jobs.c only steps them (cardtest.c runs under EmuMD).
+static uint16_t cardBegun;
+static uint16_t cardParam;
+static int cardSteps;
+static int cardStepsToEnd;
+static uint16_t cardEnd;
+static int cardAborts;
+
+void cardtest_begin(uint16_t test, const uint16_t params[4], uint32_t nowMs) {
+  (void)nowMs;
+  cardBegun = test;
+  cardParam = params[0];
+  cardSteps = 0;
+}
+
+uint16_t cardtest_step(uint32_t nowMs, uint16_t *progress,
+                       uint16_t live[MDTEST_JOB_LIVE_WORDS]) {
+  (void)nowMs;
+  cardSteps++;
+  *progress = (uint16_t)cardSteps;
+  live[0] = (uint16_t)(cardSteps + 10);
+  if (cardSteps < cardStepsToEnd) return MDTEST_JOB_RUNNING;
+  jobs_resultLine("card=ok");
+  return cardEnd;
+}
+
+void cardtest_abort(void) { cardAborts++; }
 
 static int resultHas(const char *line) {
   const JobStatus *s = jobs_status();
@@ -205,6 +234,46 @@ static void deviceInfo(void) {
   CHECK(resultHas("uid=E6614103E7"));
 }
 
+// The card tests run as jobs: begun with their parameters, stepped until
+// they end, their live words passed on, and told when cancelled.
+static void card(void) {
+  jobs_reset();
+  cardStepsToEnd = 3;
+  cardEnd = MDTEST_JOB_DONE;
+  start(MDTEST_TEST_SD_CARD, 0, 0);
+  CHECK_EQ(cardBegun, MDTEST_TEST_SD_CARD);
+  jobs_poll(1);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_RUNNING);
+  CHECK_EQ(jobs_status()->live[0], 11);
+  jobs_poll(2);
+  jobs_poll(3);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_DONE);
+  CHECK_EQ(jobs_status()->progress, 100);
+  CHECK(resultHas("card=ok"));
+
+  cardStepsToEnd = 1;
+  cardEnd = MDTEST_JOB_FAILED;
+  start(MDTEST_TEST_SD_SWAP, 45, 10);
+  CHECK_EQ(cardBegun, MDTEST_TEST_SD_SWAP);
+  CHECK_EQ(cardParam, 45);
+  jobs_poll(11);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_FAILED);
+
+  cardStepsToEnd = 100;
+  cardAborts = 0;
+  start(MDTEST_TEST_SD_CARD, 0, 20);
+  jobs_poll(21);
+  jobs_cancel();
+  CHECK_EQ(cardAborts, 1);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_CANCELLED);
+  CHECK(resultHas("cancelled=yes"));
+
+  // Cancelling another test does not touch the card.
+  start(MDTEST_TEST_DUMMY, 5, 30);
+  jobs_cancel();
+  CHECK_EQ(cardAborts, 1);
+}
+
 static const uint16_t twoSeconds[4] = {2, 0, 0, 0};
 
 static void jobs(void) {
@@ -303,6 +372,7 @@ int main(void) {
   selectStuck();
   led();
   deviceInfo();
+  card();
   text();
   restore();
   versions();

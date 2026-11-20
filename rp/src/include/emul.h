@@ -47,6 +47,10 @@
 // chip_fail 1: the radio chip fails to start, and the LED with it, as a dead
 // radio would (the LED test's third verdict); chip_fail 0 puts it back.
 #define DEVHOOKS_APP_CHIP_FAIL 9
+// card_fault N: the microSD card fails as CARDTEST_FAULT_N (cardtest.h): 1 no
+// card answers, 2 no free space, 3 a write fails, 4 a byte read back differs;
+// card_fault 0 puts it back.
+#define DEVHOOKS_APP_CARD_FAULT 10
 
 /**
  * @brief The application: never returns.

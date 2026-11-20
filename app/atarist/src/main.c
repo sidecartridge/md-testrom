@@ -122,6 +122,8 @@ static void showMenu(int lineTestReady) {
     console_line(T_MENU_INFO);
     console_line(T_MENU_SELECT);
     console_line(T_MENU_LED);
+    console_line(T_MENU_CARD);
+    console_line(T_MENU_CARD_SWAP);
   } else if (linePassed) {
     console_line(T_MENU_LOCKED1);
     console_line(T_MENU_CHANNEL_NEXT);
@@ -314,12 +316,15 @@ static void run(void) {
       lineTestMegaSte();
     } else if (key == 'c' && (linePassed || overridden)) {
       channelTest();
-    } else if (unlocked && (key == 'i' || key == 'p' || key == 'g')) {
+    } else if (unlocked && (key == 'i' || key == 'p' || key == 'g' ||
+                            key == 'd' || key == 'r')) {
       console_blank();
       if (chscreen_open(machine.mch)) {
         if (key == 'i') devscreen_info();
         if (key == 'p') devscreen_select();
         if (key == 'g') devscreen_led();
+        if (key == 'd') devscreen_card();
+        if (key == 'r') devscreen_cardSwap();
       }
     } else if (key == 'b' && device.kind == DEVICE_TEST) {
       if (devscreen_exit(machine.mch)) {

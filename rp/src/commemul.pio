@@ -62,6 +62,10 @@ static inline void commemul_read_program_init(PIO pio, uint sm, uint offset,
     sm_config_set_out_pins(&c, addr_pin_base, addr_pin_count);
     sm_config_set_sideset_pins(&c, rw_pin_base);
 
+    // READ and WRITE off (high) before they become outputs: the PIO's
+    // latch would drive them low, both shifters open, until the first
+    // side-set.
+    pio_sm_set_pins_with_mask(pio, sm, 3u << rw_pin_base, 3u << rw_pin_base);
     pio_sm_set_consecutive_pindirs(pio, sm, rw_pin_base, 2, true);
     sm_config_set_clkdiv(&c, div);
 

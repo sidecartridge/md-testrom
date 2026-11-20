@@ -191,9 +191,12 @@
 #define MDTEST_CAP_SELECT 0x00000004UL
 #define MDTEST_CAP_LED 0x00000008UL
 #define MDTEST_CAP_EXIT 0x00000010UL
+#define MDTEST_CAP_SD_CARD 0x00000020UL
+#define MDTEST_CAP_SD_SWAP 0x00000040UL
 #define MDTEST_CAPS                                                     \
   (MDTEST_CAP_DUMMY | MDTEST_CAP_DEVICE_INFO | MDTEST_CAP_SELECT |      \
-   MDTEST_CAP_LED | MDTEST_CAP_EXIT)
+   MDTEST_CAP_LED | MDTEST_CAP_EXIT | MDTEST_CAP_SD_CARD |              \
+   MDTEST_CAP_SD_SWAP)
 
 // The tests a job runs.
 #define MDTEST_TEST_DUMMY 1U  // parameters: seconds; result: seconds, steps
@@ -221,6 +224,29 @@
 #define MDTEST_LED_RELEASE 3U
 #define MDTEST_LED_BLINK_MAX_S 60U
 #define MDTEST_LED_BLINK_MS 500U
+// The microSD card: started, its filesystem mounted and described, one
+// temporary file (MDTEST_SD_FILE, MDTEST_SD_FILE_KB) written, read back,
+// compared and deleted, the card stopped. Nothing else on it is written.
+// Live words: the phase (MDTEST_SD_PHASE_*), KB done.
+#define MDTEST_TEST_SD_CARD 5U
+#define MDTEST_SD_FILE "MDTEST-CARD-CHECK.TMP"
+#define MDTEST_SD_FILE_KB 256U
+#define MDTEST_SD_PHASE_START 0U
+#define MDTEST_SD_PHASE_MOUNT 1U
+#define MDTEST_SD_PHASE_WRITE 2U
+#define MDTEST_SD_PHASE_READ 3U
+#define MDTEST_SD_PHASE_CLEAN 4U
+// The card out and back in, each wait parameter 0 seconds
+// (MDTEST_SD_SWAP_SECONDS if 0): done once it is back and mounts. Live words:
+// the phase (MDTEST_SD_SWAP_*), seconds left in it.
+#define MDTEST_TEST_SD_SWAP 6U
+#define MDTEST_SD_SWAP_SECONDS 30U
+#define MDTEST_SD_SWAP_MAX_SECONDS 120U
+#define MDTEST_SD_SWAP_FIRST 0U  // looking for the card before asking
+#define MDTEST_SD_SWAP_OUT 1U    // waiting for it to be taken out
+#define MDTEST_SD_SWAP_IN 2U     // waiting for it to be put back
+#define MDTEST_SD_SWAP_MOUNT 3U  // back: started and mounted again
+#define MDTEST_TEST_LAST MDTEST_TEST_SD_SWAP
 
 // A job's status answer: MDTEST_ANS_DATA + these words.
 #define MDTEST_JOB_ANS_NUMBER 0U

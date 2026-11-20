@@ -34,6 +34,9 @@ Steps (--step, or --test NAME for tools/dev/emu_tests/NAME.steps):
                         the bench's next request to the program
                         (MDTEST_REQUEST_* in common/mdtest.h)
   select [MS]           SELECT on the device pressed for MS ms (100)
+  card out|in           the microSD card taken out of the device, or put back
+  sdsame                at the end: the microSD card's folder holds what it
+                        held before the run, file for file
   shot NAME             a screenshot, shots/NAME.png
   floppy NAME REGEX     at the end, with Hatari stopped: the floppy holds
                         the file NAME and its text matches REGEX
@@ -47,8 +50,11 @@ common/mdtest.h), "@debug" (the program's debug build, which can override
 the gate), "@protocol N" (the program built to speak protocol N), "@drop N"
 (every Nth command runs unanswered), "@bench TEXT" (an MDTEST.BNC holding
 TEXT), "@twice" (the program twice in the AUTO folder: quitting the first
-starts it again) and "@chipfail" (the radio chip fails to start, as a dead
-one would) set those options.
+starts it again), "@chipfail" (the radio chip fails to start, as a dead
+one would), "@cardfault N" (the microSD card fails as CARDTEST_FAULT_N in
+rp/src/include/cardtest.h) and "@sdapps" (Booster's apps folder on the card)
+set those options. The card's folder always holds one file of the user's,
+USER.TXT.
 
 The run folder, tools/dev/logs/emu/<date>-<setup>-<name>/, keeps
 command.txt, hatari.out, the program's lines (screen.txt), shots/ (end.png
@@ -57,8 +63,12 @@ report.json. Standard library and mtools only.
 
 Usage:  emu_harness.py --setup st-104 --test main-screen
         emu_harness.py --all                  # every test on every setup
+        emu_harness.py --all --jobs 6         # the same, six runs at once
+        emu_harness.py --all --jobs 6 --test card --test card-none
+                                              # these tests on every setup
 """
 import argparse
+import concurrent.futures
 import datetime
 import json
 import os
@@ -110,6 +120,8 @@ def crashes(out_bytes):
 
 
 def stcmd_make(*make_args):
+    if os.environ.get("EMU_HARNESS_PROGRAMS_BUILT"):
+        return  # a --jobs run: the parent built every program first
     env = dict(os.environ, STCMD_IMAGE_TAG=os.environ.get("STCMD_IMAGE_TAG", "1.5.0"),
                STCMD_NO_TTY="1", STCMD_QUIET="1", ST_WORKING_FOLDER=str(ROOT))
     shutil.copy(ROOT / "version.txt", ROOT / "app/atarist/version.txt")
@@ -343,6 +355,20 @@ class Run:
         path = self.hatari.out_path.parent / "select.txt"
         path.write_text(f"{int(ms)}\n")
 
+    def step_card(self, where):
+        # The card taken out or put back: the stand-in card is out while the
+        # file EMU_CARD_OUT_FILE names exists (emu/standins.c).
+        if where not in ("out", "in"):
+            raise StepFailed(f"card {where}: out or in")
+        path = self.hatari.out_path.parent / "card-out"
+        if where == "out":
+            path.write_text("out\n")
+        elif path.exists():
+            path.unlink()
+
+    def step_sdsame(self):
+        self.after.append(("sdsame", None, None))
+
     def step_shot(self, name):
         self.hatari.shot(name)
 
@@ -353,9 +379,25 @@ class Run:
         self.after.append(("nofloppy", name, None))
 
 
-def check_floppy(checks, files_dir):
+def sd_listing(sd_dir):
+    """Every file and folder under the card's folder, with its contents."""
+    listing = {}
+    for path in sorted(sd_dir.rglob("*")):
+        rel = str(path.relative_to(sd_dir))
+        listing[rel] = None if path.is_dir() else path.read_bytes()
+    return listing
+
+
+def check_floppy(checks, files_dir, sd_dir=None, sd_before=None):
     results = []
     for kind, name, regex in checks:
+        if kind == "sdsame":
+            after = sd_listing(sd_dir)
+            changed = sorted(set(after) ^ set(sd_before) |
+                             {k for k in after if k in sd_before and after[k] != sd_before[k]})
+            results.append(("sdsame", not changed,
+                            f"changed on the card: {', '.join(changed)}" if changed else None))
+            continue
         path = files_dir / name
         if kind == "nofloppy":
             ok = not path.exists()
@@ -371,7 +413,7 @@ def check_floppy(checks, files_dir):
 
 
 OPTIONS = ("hatari", "monitor", "memsize", "layout", "protect", "fault", "debug",
-           "protocol", "drop", "bench", "twice", "chipfail")
+           "protocol", "drop", "bench", "twice", "chipfail", "cardfault", "sdapps")
 
 
 def parse_steps(name, lines, opts):
@@ -410,6 +452,9 @@ def hatari_command(setup, opts, run_dir, floppy):
         cmd += ["--monitor", opts["monitor"]]
     if opts.get("hatari", "fork") == "fork":
         shutil.copytree(ROOT / "emu/sd", run_dir / "sd")
+        (run_dir / "sd/USER.TXT").write_text("The user's own file.\n")
+        if "sdapps" in opts:
+            (run_dir / "sd/apps").mkdir()
         cmd += ["--md-sd", str(run_dir / "sd"), "--md-verbose", "on",
                 "--md-firmware", str(PLUGIN)]
     return cmd
@@ -447,6 +492,10 @@ def run_one(setup, tests, extra_steps, disk, timeout):
         env["MDTEST_DROP"] = opts["drop"]
     if "chipfail" in opts:
         env["MDTEST_CHIP_FAIL"] = "1"
+    if opts.get("cardfault"):
+        env["MDTEST_CARD_FAULT"] = opts["cardfault"]
+    env["EMU_CARD_OUT_FILE"] = str(run_dir / "card-out")
+    sd_before = sd_listing(run_dir / "sd") if (run_dir / "sd").exists() else {}
     env["MDTEST_REQUEST_FILE"] = str(run_dir / "request.txt")
     env["EMU_SELECT_FILE"] = str(run_dir / "select.txt")
     (run_dir / "command.txt").write_text(shlex.join(cmd) + "\n")
@@ -489,7 +538,8 @@ def run_one(setup, tests, extra_steps, disk, timeout):
         hatari.stop()
     report["floppy_files"] = floppy_files(floppy, run_dir / "floppy-files")
     if not failed:
-        for step, ok, detail in check_floppy(run.after, run_dir / "floppy-files"):
+        for step, ok, detail in check_floppy(run.after, run_dir / "floppy-files",
+                                             run_dir / "sd", sd_before):
             entry = {"step": step, "status": "PASS" if ok else "FAIL"}
             if detail:
                 entry["detail"] = detail
@@ -506,6 +556,41 @@ def run_one(setup, tests, extra_steps, disk, timeout):
     return report["result"] == "PASS"
 
 
+def run_parallel(setups, tests, args):
+    """--all with --jobs N: each run a child harness (its own run folder, Hatari
+    and control socket), N at a time; each run's lines printed when it ends.
+    The programs are built first, once, so no two runs build at once."""
+    for t in [] if args.disk_a else tests:
+        opts = {}
+        load_test(t, opts)
+        layout, protocol = opts.get("layout"), opts.get("protocol")
+        build_program(int(layout) if layout else None,
+                      int(protocol) if protocol else None, "debug" in opts)
+    env = dict(os.environ, EMU_HARNESS_PROGRAMS_BUILT="1")
+    pairs = [(s, t) for s in setups if (ROOT / SETUPS[s][1]).exists() for t in tests]
+
+    def child(pair):
+        setup, test = pair
+        cmd = [sys.executable, str(Path(__file__).resolve()), "--no-build", "--setup",
+               setup, "--test", test, "--timeout", str(args.timeout)]
+        if args.disk_a:
+            cmd += ["--disk-a", args.disk_a]
+        done = subprocess.run(cmd, env=env, cwd=ROOT, capture_output=True, text=True)
+        return setup, test, done.returncode == 0, done.stdout + done.stderr
+
+    start = time.time()
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
+        for setup, test, ok, out in pool.map(child, pairs):
+            print(out, end="", flush=True)
+            results.append((setup, test, ok))
+    print(f"\nemu_harness summary ({len(results)} runs, {args.jobs} at once, "
+          f"{time.time() - start:.0f} s):")
+    for setup, name, ok in results:
+        print(f"  {'PASS' if ok else 'FAIL'}  {setup} {name}")
+    return 0 if all(ok for _, _, ok in results) else 1
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -517,6 +602,8 @@ def main():
     ap.add_argument("--disk-a", help="this floppy instead of one built with MDTEST.TOS")
     ap.add_argument("--no-build", action="store_true", help="use build/md-testrom.mdfw as it is")
     ap.add_argument("--timeout", type=float, default=300, help="host seconds a run")
+    ap.add_argument("--jobs", type=int, default=1,
+                    help="with --all: this many runs at once, each its own Hatari")
     args = ap.parse_args()
 
     if not args.no_build:
@@ -524,6 +611,8 @@ def main():
     setups = args.setup or (list(SETUPS) if args.all else ["st-104"])
     tests = args.test or ([p.stem for p in sorted(TESTS.glob("*.steps"))] if args.all else [])
     results = []
+    if args.all and args.jobs > 1:
+        return run_parallel(setups, tests, args)
     for setup in setups:
         if not (ROOT / SETUPS[setup][1]).exists():
             print(f"emu_harness: SKIP {setup}: no {SETUPS[setup][1]}")
