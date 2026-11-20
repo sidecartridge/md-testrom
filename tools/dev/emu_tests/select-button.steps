@@ -1,0 +1,20 @@
+# SELECT pressed during its test: shown as it happens, reported, not acted
+# on; the same press after the test leaves for Booster.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key p
+say "^Press SELECT on the device once" 500
+select 400
+say "^  SELECT pressed" 500
+say "^  SELECT released" 500
+say "^PASS  SELECT works" 500
+say "^  pressed for [3-5]\d\d ms" 100
+log "SELECT pressed during its test: reported, not acted on" 100
+nosay "^WARN  Release SELECT"
+sayn 3 "^Press a key" 500
+select 100
+log "SELECT pressed: jumping to the booster app" 500

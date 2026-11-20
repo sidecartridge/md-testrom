@@ -1,13 +1,209 @@
 // units: rp/src/jobs.c common/mdtest.c
 /* The job runner (rp/src/jobs.c): one job at a time, a repeated start
  * answered with the same job, unknown tests refused, progress, cancel, and
- * the result as "key=value" lines; and the window's text and version
- * helpers the commands use (common/mdtest.h). */
+ * the result as "key=value" lines; the SELECT and LED tests over stand-in
+ * hardware; and the window's text and version helpers the commands use
+ * (common/mdtest.h). */
 #include <string.h>
 
+#include "devtests.h"
 #include "jobs.h"
 #include "mdtest.h"
 #include "test.h"
+
+// The hardware, as each test sets it (devtests.h).
+static bool selectLevel;
+static int chipAnswer;   // devtests_ledChipUp(): 1 started, 0 up, <0 dead
+static int ledAnswer;    // devtests_ledSet()
+static int ledSets;
+static bool ledLevel;
+static int released;
+
+void devtests_info(void) { jobs_resultLine("uid=E6614103E7"); }
+bool devtests_selectLevel(void) { return selectLevel; }
+int devtests_ledChipUp(uint32_t *startMs, int32_t *heapBytes) {
+  *startMs = 320;
+  *heapBytes = 12000;
+  int answer = chipAnswer;
+  if (chipAnswer == 1) chipAnswer = 0;
+  return answer;
+}
+int devtests_ledSet(bool on) {
+  ledSets++;
+  ledLevel = on;
+  return ledAnswer;
+}
+void devtests_ledRelease(void) { released++; }
+void devtests_poll(void) {}
+
+static int resultHas(const char *line) {
+  const JobStatus *s = jobs_status();
+  size_t n = strlen(line);
+  const char *r = jobs_result();
+  for (size_t i = 0; i + n <= s->resultLength; i++) {
+    if ((i == 0 || r[i - 1] == '\n') && memcmp(&r[i], line, n) == 0 &&
+        r[i + n] == '\n') {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static uint16_t seq = 100;
+
+static void start(uint16_t test, uint16_t p0, uint32_t nowMs) {
+  uint16_t number;
+  const uint16_t params[4] = {p0, 0, 0, 0};
+  CHECK_EQ(jobs_start(test, ++seq, params, nowMs, &number), MDTEST_STATUS_OK);
+}
+
+// One press and release: done, with its length; bounces under 30 ms are not
+// presses.
+static void selectPress(void) {
+  jobs_reset();
+  selectLevel = false;
+  start(MDTEST_TEST_SELECT, 5, 0);
+  CHECK(jobs_selectOwnsPress(0));
+  jobs_poll(0);
+  jobs_poll(1000);
+  selectLevel = true;  // a bounce
+  jobs_poll(1010);
+  selectLevel = false;
+  jobs_poll(1020);
+  jobs_poll(1100);
+  CHECK_EQ(jobs_status()->live[0], 0);
+  selectLevel = true;
+  jobs_poll(2000);
+  jobs_poll(2040);
+  CHECK_EQ(jobs_status()->live[0], 1);
+  jobs_poll(2400);
+  CHECK_EQ(jobs_status()->live[1], 400);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_RUNNING);
+  selectLevel = false;
+  jobs_poll(2500);
+  jobs_poll(2540);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_DONE);
+  // The release it ended on may reach select.c a moment later: still its.
+  CHECK(jobs_selectOwnsPress(2600));
+  CHECK(!jobs_selectOwnsPress(3040));
+  CHECK_EQ(jobs_status()->live[2], 1);
+  CHECK(resultHas("presses=1"));
+  CHECK(resultHas("press_ms=500"));
+}
+
+static void selectNoPress(void) {
+  jobs_reset();
+  selectLevel = false;
+  start(MDTEST_TEST_SELECT, 5, 0);
+  jobs_poll(0);
+  jobs_poll(2500);
+  CHECK_EQ(jobs_status()->progress, 50);
+  jobs_poll(5000);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_FAILED);
+  CHECK(resultHas("error=no press"));
+}
+
+// Pressed from the start: stuck after 2 s; released sooner, that press is
+// not counted (its start was not seen) and the next one is.
+static void selectStuck(void) {
+  jobs_reset();
+  selectLevel = true;
+  start(MDTEST_TEST_SELECT, 0, 0);
+  jobs_poll(0);
+  jobs_poll(1999);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_RUNNING);
+  jobs_poll(2000);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_FAILED);
+  CHECK(resultHas("error=pressed from the start"));
+
+  jobs_reset();
+  selectLevel = true;
+  start(MDTEST_TEST_SELECT, 0, 0);
+  jobs_poll(0);
+  selectLevel = false;
+  jobs_poll(500);
+  jobs_poll(600);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_RUNNING);
+  CHECK_EQ(jobs_status()->live[2], 0);
+  selectLevel = true;
+  jobs_poll(1000);
+  jobs_poll(1100);
+  selectLevel = false;
+  jobs_poll(1300);
+  jobs_poll(1400);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_DONE);
+  CHECK(resultHas("press_ms=300"));
+}
+
+static void led(void) {
+  jobs_reset();
+  chipAnswer = 1;
+  ledAnswer = 0;
+  start(MDTEST_TEST_LED, MDTEST_LED_ON, 0);
+  jobs_poll(0);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_DONE);
+  CHECK(resultHas("chip=started"));
+  CHECK(resultHas("chip_start_ms=320"));
+  CHECK(resultHas("led=on"));
+  CHECK(ledLevel);
+  CHECK_EQ(jobs_status()->live[0], 1);
+
+  start(MDTEST_TEST_LED, MDTEST_LED_OFF, 10);
+  jobs_poll(10);
+  CHECK(resultHas("chip=up"));
+  CHECK(resultHas("led=off"));
+  CHECK(!ledLevel);
+
+  // Blink: toggles every 500 ms until cancelled.
+  ledSets = 0;
+  start(MDTEST_TEST_LED, MDTEST_LED_BLINK, 1000);
+  jobs_poll(1000);
+  jobs_poll(1499);
+  CHECK_EQ(ledSets, 1);
+  jobs_poll(1500);
+  CHECK_EQ(ledSets, 2);
+  CHECK(!ledLevel);
+  jobs_poll(2000);
+  CHECK(ledLevel);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_RUNNING);
+  jobs_cancel();
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_CANCELLED);
+
+  // Reads back otherwise: the chip answers, the LED path does not.
+  ledAnswer = 1;
+  start(MDTEST_TEST_LED, MDTEST_LED_ON, 3000);
+  jobs_poll(3000);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_FAILED);
+  CHECK(resultHas("error=led reads back wrong"));
+
+  released = 0;
+  start(MDTEST_TEST_LED, MDTEST_LED_RELEASE, 4000);
+  jobs_poll(4000);
+  CHECK_EQ(released, 1);
+  CHECK(resultHas("chip=off"));
+
+  // The chip does not start: no LED set at all.
+  chipAnswer = -1;
+  ledSets = 0;
+  start(MDTEST_TEST_LED, MDTEST_LED_ON, 5000);
+  jobs_poll(5000);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_FAILED);
+  CHECK(resultHas("chip=no answer"));
+  CHECK_EQ(ledSets, 0);
+
+  start(MDTEST_TEST_LED, 9, 6000);
+  jobs_poll(6000);
+  CHECK(resultHas("error=bad mode"));
+}
+
+static void deviceInfo(void) {
+  jobs_reset();
+  start(MDTEST_TEST_DEVICE_INFO, 0, 0);
+  jobs_poll(0);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_DONE);
+  CHECK(resultHas("test=device"));
+  CHECK(resultHas("uid=E6614103E7"));
+}
 
 static const uint16_t twoSeconds[4] = {2, 0, 0, 0};
 
@@ -18,6 +214,7 @@ static void jobs(void) {
   CHECK_EQ(jobs_status()->number, 0);
 
   CHECK_EQ(jobs_start(42, 1, twoSeconds, 0, &number), MDTEST_STATUS_UNKNOWN);
+  CHECK_EQ(jobs_start(0, 1, twoSeconds, 0, &number), MDTEST_STATUS_UNKNOWN);
   CHECK_EQ(jobs_status()->state, MDTEST_JOB_IDLE);
 
   CHECK_EQ(jobs_start(MDTEST_TEST_DUMMY, 1, twoSeconds, 1000, &number),
@@ -101,6 +298,11 @@ static void versions(void) {
 
 int main(void) {
   jobs();
+  selectPress();
+  selectNoPress();
+  selectStuck();
+  led();
+  deviceInfo();
   text();
   restore();
   versions();

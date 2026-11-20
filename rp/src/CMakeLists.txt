@@ -121,6 +121,7 @@ target_sources(${PROJECT_NAME} PRIVATE
         chandler.c
         channel.c
         commemul.c
+        devtests.c
         emul.c
         gconfig.c
         health.c
@@ -146,6 +147,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 # Link libraries required for the project
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${LINK_LIBRARIES}        # External or additional libraries passed as variables
+    hardware_adc             # The die's temperature sensor
     hardware_flash           # Flash memory access
     no-OS-FatFS-SD-SDIO-SPI-RPi-Pico                # FATFS library   
     pico_stdlib              # Core functionality

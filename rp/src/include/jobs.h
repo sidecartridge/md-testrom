@@ -25,6 +25,7 @@ typedef struct {
   uint16_t test;      // MDTEST_TEST_*
   uint16_t progress;  // 0 to 100
   uint16_t resultLength;
+  uint16_t live[MDTEST_JOB_LIVE_WORDS];  // what the test shows while it runs
 } JobStatus;
 
 /**
@@ -50,5 +51,13 @@ const char *jobs_result(void);
 
 /** @brief Forget every job (an RP start, or a host test). */
 void jobs_reset(void);
+
+/** @brief True while the SELECT test runs, and for a moment after it ends
+ *         (the release it ended on): a short press is the test's, not
+ *         Booster's. */
+int jobs_selectOwnsPress(uint32_t nowMs);
+
+/** @brief One "key=value" line of the running job's result (printf). */
+void jobs_resultLine(const char *fmt, ...);
 
 #endif  // JOBS_H

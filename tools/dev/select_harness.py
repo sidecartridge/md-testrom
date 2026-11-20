@@ -7,6 +7,9 @@ Multidevice Test firmware, which has no setup menu:
 
   bounce           15 ms press: ignored (the debounce is 30 ms); the firmware
                    keeps running
+  during-test      short press while the SELECT test runs (a job, started
+                   over SWD as job.py does): reported with its length, not
+                   acted on; the firmware keeps running
   short            short press: the firmware leaves for Booster (the RP no
                    longer runs this ELF: the reset handler in the live vector
                    table is not this ELF's). This ends the probe session:
@@ -151,6 +154,43 @@ def case_short(h: Harness) -> int:
                    "test microfirmware again)")
 
 
+def case_during_test(h: Harness) -> int:
+    import job
+    before = h.state()
+    show("before", before)
+    if not before["ours"]:
+        raise swd.SwdError("the RP does not run this ELF")
+    job.app(h.elf, "SELECT", 1)
+    try:
+        seq = int(time.time()) & 0xFFFF
+        a = job.command(h.elf, "JOB_START", job.TESTS["select"], seq, 10, 0, 0, 0)
+        if a["status"] != "ok":
+            raise swd.SwdError(f"start refused: {a['status']}")
+        time.sleep(0.5)
+        h.press(swd.SELECT_SHORT_MS)
+        deadline = time.monotonic() + 15
+        while True:
+            time.sleep(0.3)
+            a = job.command(h.elf, "JOB_STATUS")
+            if job.JOB_STATES.get(a["data"][1]) != "running":
+                break
+            if time.monotonic() > deadline:
+                job.command(h.elf, "JOB_CANCEL")
+                raise swd.SwdError("the SELECT test is still running")
+        text = job.result_text(h.elf, a["length"])
+    finally:
+        job.app(h.elf, "SELECT", 0)
+    for line in text.splitlines():
+        print(f"  {line}")
+    time.sleep(1.0)
+    after = h.state()
+    show("after ", after)
+    done = job.JOB_STATES.get(a["data"][1]) == "done" and "press_ms=" in text
+    return verdict(done and after["ours"],
+                   "a short press during the SELECT test is reported, not "
+                   "acted on")
+
+
 def settings_region(h: Harness) -> tuple[int, int]:
     start = h.sym["_config_flash_start"][0]
     return start, FLASH_END - start
@@ -194,8 +234,8 @@ def case_long(h: Harness, force: bool, backup: str) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("case", choices=["status", "bounce", "short", "long",
-                                     "backup", "restore"])
+    ap.add_argument("case", choices=["status", "bounce", "during-test", "short",
+                                     "long", "backup", "restore"])
     ap.add_argument("file", nargs="?", help="backup file (backup/restore/long)")
     ap.add_argument("--elf")
     ap.add_argument("--force", action="store_true")
@@ -212,6 +252,8 @@ def main() -> int:
                     else case_restore)(h, args.file)
         if args.case == "bounce":
             return case_bounce(h)
+        if args.case == "during-test":
+            return case_during_test(h)
         if args.case == "short":
             return case_short(h)
         return case_long(h, args.force, args.file or os.path.join(

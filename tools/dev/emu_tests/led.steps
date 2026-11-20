@@ -1,0 +1,19 @@
+# The green LED through the radio chip: on, off, blinking, each confirmed by
+# the user; then left as the firmware started (off, the chip powered down).
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key g
+say "^Starting the radio chip" 500
+say "^  radio chip started in \d+ ms" 1000
+say "^Is the green LED on" 500
+key y
+say "^Is the green LED off now" 500
+key y
+say "^Is the green LED blinking" 500
+key y
+say "^PASS  The green LED works" 500
+log "LED: off, the radio chip powered down" 500

@@ -7,6 +7,7 @@ say "^Press a key" 100
 key x
 key o
 say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
 key c
 say "^PASS  The device takes commands" 500
 say "^RP counters +\d+  PASS" 40000

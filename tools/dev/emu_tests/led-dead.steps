@@ -1,0 +1,13 @@
+# The radio chip does not start: the LED cannot work, and Wi-Fi and
+# Bluetooth will fail too.
+@chipfail
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key g
+say "^FAIL  The radio chip does not answer" 1500
+say "^The Pico W's radio chip is faulty" 100
+nosay "^Is the green LED"

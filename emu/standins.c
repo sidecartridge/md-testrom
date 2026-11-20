@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -29,25 +30,45 @@ uint32_t commemul_getOverruns(void) { return 0; }
 
 /* SELECT. EmuMD drops the callbacks the firmware registers, so the bench
  * press does what the firmware's short press does (emul.c): it leaves for
- * Booster, which EmuMD does not run. The bench presses it by creating the
- * file EMU_SELECT_FILE names. */
+ * Booster, which EmuMD does not run, unless the SELECT test runs. The bench
+ * presses it by creating the file EMU_SELECT_FILE names, holding how long
+ * the press lasts in ms (100 if empty); the level reads pressed that long
+ * (emu_selectLevel(), the SELECT test's), and the release is the press. */
 #include "emul.h"
+#include "pico/stdlib.h"
+
+#define EMU_SELECT_POLL_US 20000u
+#define EMU_SELECT_DEFAULT_MS 100u
+
+static bool emuPressed;
+static uint32_t emuReleaseUs;
+
+bool emu_selectLevel(void) {
+  return emuPressed && (int32_t)(time_us_32() - emuReleaseUs) < 0;
+}
 
 void select_poll(void) {
   static const char *path;
-  static struct timespec last;
+  static uint32_t lastUs;
   if (!path && !(path = getenv("EMU_SELECT_FILE"))) path = "";
   if (!*path) return;
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  if ((now.tv_sec - last.tv_sec) * 1000 +
-          (now.tv_nsec - last.tv_nsec) / 1000000 < 20)
-    return;
-  last = now;
-  if (access(path, F_OK) != 0) return;
+  uint32_t now = time_us_32();
+  if (emuPressed && !emu_selectLevel()) {
+    emuPressed = false;
+    fprintf(stderr, "emu: SELECT released\n");
+    emul_selectShortPress();
+  }
+  if (now - lastUs < EMU_SELECT_POLL_US) return;
+  lastUs = now;
+  FILE *f = fopen(path, "r");
+  if (!f) return;
+  unsigned int ms = 0;
+  if (fscanf(f, "%u", &ms) != 1 || ms == 0) ms = EMU_SELECT_DEFAULT_MS;
+  fclose(f);
   unlink(path);
-  fprintf(stderr, "emu: SELECT pressed (short)\n");
-  emul_selectShortPress();
+  emuPressed = true;
+  emuReleaseUs = now + ms * 1000u;
+  fprintf(stderr, "emu: SELECT pressed for %u ms\n", ms);
 }
 
 /* health.c records why the RP restarted from the RP2040's watchdog, fault
@@ -64,6 +85,19 @@ void health_markReset(void) {}
 void health_prepareJump(void) {}
 void health_tick(void) {}
 bool health_isCrashLoop(void) { return false; }
+/* What the device information shows: a power-on, no heap or stack measured. */
+void health_getReport(health_report_t *out) {
+  memset(out, 0, sizeof(*out));
+  out->uptime_ms = to_ms_since_boot(get_absolute_time());
+  out->boot = HEALTH_BOOT_POWER_ON;
+}
+const char *health_bootName(health_boot_t boot) {
+  return boot == HEALTH_BOOT_POWER_ON ? "power_on" : "other";
+}
+const char *health_phaseName(uint8_t phase) {
+  (void)phase;
+  return "main_loop";
+}
 #if defined(_DEBUG) && (_DEBUG != 0)
 void health_requestTest(health_test_t test) { (void)test; }
 #endif

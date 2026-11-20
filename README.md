@@ -71,7 +71,12 @@ The line test checks the data lines D0-D15, the address lines A1-A15, the ROM4 a
 
 ## Return to the Booster Configurator
 
-To return to the Booster Configurator, press the **`SELECT`** button on your SidecarTridge Multi-device. This will exit the test program and bring you back to the main menu of the Booster Configurator.
+To return to the Booster Configurator, either:
+
+- choose **[B] Back to Booster** in `MDTEST.TOS`: the device restarts into Booster; then reset the computer, or switch it off and on, to use Booster; or
+- press the **`SELECT`** button on your SidecarTridge Multi-device (except during the SELECT button test, which only reports the press).
+
+Holding `SELECT` for 10 seconds resets the device to its factory settings.
 
 
 ## Requirements for developers

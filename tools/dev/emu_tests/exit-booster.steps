@@ -1,0 +1,8 @@
+# Back to Booster from the program (no gate): answered, then the device
+# leaves as a short SELECT press does; the program reads the port no more.
+say "^Press a key" 100
+key x
+key b
+say "^The device is restarting into Booster" 500
+log "The ST asked: jumping to the booster app" 500
+say "^Press a key to quit" 100

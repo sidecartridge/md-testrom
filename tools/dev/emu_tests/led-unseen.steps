@@ -1,0 +1,16 @@
+# The chip answers but the user sees no blinking: the LED or its path.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key g
+say "^Is the green LED on" 1500
+key y
+say "^Is the green LED off now" 500
+key y
+say "^Is the green LED blinking" 500
+key n
+say "^FAIL  The LED does not do what it is told" 500
+say "^  on: yes, off: yes, blinking: no" 100

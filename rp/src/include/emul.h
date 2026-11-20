@@ -44,6 +44,9 @@
 #define DEVHOOKS_APP_SELECT 7
 // An RP restart as the ST sees it, with no reset (channel_benchRestart()).
 #define DEVHOOKS_APP_RESTART 8
+// chip_fail 1: the radio chip fails to start, and the LED with it, as a dead
+// radio would (the LED test's third verdict); chip_fail 0 puts it back.
+#define DEVHOOKS_APP_CHIP_FAIL 9
 
 /**
  * @brief The application: never returns.

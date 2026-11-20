@@ -29,6 +29,9 @@ void channel_poll(void);
 
 bool channel_selected(void);
 
+/** @brief True once the ST's exit to Booster has been answered and read. */
+bool channel_exitRequested(void);
+
 #if (defined(_DEBUG) && (_DEBUG != 0)) || (defined(EMUMD) && EMUMD)
 /**
  * @brief Debug builds and EmuMD: what the ST sees of an RP restart, without
