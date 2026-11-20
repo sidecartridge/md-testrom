@@ -34,6 +34,18 @@
 // should be modified when adding new features to the application.
 
 int main() {
+  // The level shifters' READ and WRITE enables are active low, and a pad
+  // starts with its pull-down on: from a restart until the ROM emulation's
+  // PIO takes them, both shifters would be open on the cartridge port. Hold
+  // them off first thing.
+  for (uint pin = READ_SIGNAL_GPIO_BASE; pin <= WRITE_SIGNAL_GPIO_BASE;
+       pin++) {
+    gpio_init(pin);
+    gpio_pull_up(pin);
+    gpio_put(pin, 1);
+    gpio_set_dir(pin, GPIO_OUT);
+  }
+
   // Set the clock frequency. Keep in mind that if you are managing remote
   // commands you should overclock the CPU to >=225MHz
   set_sys_clock_khz(RP2040_CLOCK_FREQ_KHZ, true);
