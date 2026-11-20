@@ -15,6 +15,8 @@
 #define SELECT_POLL_TICKS 10UL /* 50 ms: the press shows as it happens */
 #define LED_POLL_TICKS 20UL
 #define CARD_POLL_TICKS 20UL
+#define WIFI_POLL_TICKS 20UL
+#define WIFI_WEAK_DBM (-70L)
 /* A card slower than this, writing or reading, gets a warning. */
 #define CARD_SLOW_KBS 100L
 /* When a press has lasted this long, the factory reset is near. */
@@ -434,4 +436,182 @@ int devscreen_exit(long mch) {
   console_line(T_EXIT_DONE);
   console_line(T_EXIT_ADVICE);
   return 1;
+}
+
+/* The Wi-Fi test's live view: each step as it begins. */
+static unsigned short wifiPhase;
+
+static int wifiWatch(const CmdAnswer *a) {
+  unsigned short phase = a->data[MDTEST_JOB_ANS_LIVE];
+  if (phase == wifiPhase) return 0;
+  /* A poll can miss a short phase: each one between is said too. */
+  while (wifiPhase < phase) {
+    wifiPhase++;
+    if (wifiPhase == MDTEST_WIFI_PHASE_SCAN) console_line(T_WIFI_SCAN);
+    if (wifiPhase == MDTEST_WIFI_PHASE_JOIN) console_line(T_WIFI_JOIN);
+    if (wifiPhase == MDTEST_WIFI_PHASE_ADDRESS) console_line(T_WIFI_ADDRESS);
+    if (wifiPhase == MDTEST_WIFI_PHASE_ROUTER) console_line(T_WIFI_ROUTER);
+    if (wifiPhase == MDTEST_WIFI_PHASE_DNS) console_line(T_WIFI_DNS, MDTEST_WIFI_HOST);
+    if (wifiPhase == MDTEST_WIFI_PHASE_WEB) console_line(T_WIFI_WEB, MDTEST_WIFI_HOST);
+  }
+  return 0;
+}
+
+/* The firmware's labels for a signal, in dBm (network.c). */
+static const char *signalLabel(long rssi) {
+  if (rssi >= -30) return "excellent";
+  if (rssi >= -40) return "very good";
+  if (rssi >= -50) return "good";
+  if (rssi >= -60) return "OK";
+  if (rssi >= -67) return "fair";
+  if (rssi >= -70) return "weak";
+  if (rssi >= -80) return "very weak";
+  return "unusable";
+}
+
+/* net=RSSI|CHANNEL|SECURITY|NAME lines, the strongest first. */
+static void wifiNetworks(void) {
+  for (const char *line = text; *line;) {
+    const char *end = strchr(line, '\n');
+    size_t n = end ? (size_t)(end - line) : strlen(line);
+    if (strncmp(line, "net=", 4) == 0 && n < 80) {
+      char copy[80];
+      memcpy(copy, line + 4, n - 4);
+      copy[n - 4] = '\0';
+      char *field[4] = {copy, 0, 0, 0};
+      for (int i = 1; i < 4; i++) {
+        field[i] = strchr(field[i - 1], '|');
+        if (!field[i]) break;
+        *field[i]++ = '\0';
+      }
+      if (field[3]) {
+        console_privateLine(field[3], T_WIFI_NET, field[0], field[1], field[2],
+                            field[3]);
+      }
+    }
+    if (!end) break;
+    line = end + 1;
+  }
+}
+
+static void wifiFailure(void) {
+  const char *ssid = has("ssid") ? value("ssid") : "";
+  console_blank();
+  if (chscreen_valueIs(text, "error", "chip silent")) {
+    console_line(T_WIFI_CHIP_FAIL);
+    console_line(T_WIFI_CHIP_FAIL_DETAIL);
+    console_line(T_WIFI_CHIP_FAIL_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "scan failed")) {
+    console_line(T_WIFI_SCAN_FAIL);
+    console_line(T_WIFI_SCAN_FAIL_DETAIL, value("scan_error"));
+    console_line(T_WIFI_SCAN_FAIL_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "no network configured")) {
+    console_line(T_WIFI_NONE);
+    console_line(T_WIFI_NONE_DETAIL);
+    console_line(T_WIFI_NONE_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "network not found")) {
+    console_line(T_WIFI_NOT_FOUND);
+    console_privateLine(ssid, T_WIFI_NOT_FOUND_DETAIL, ssid);
+    console_line(T_WIFI_NOT_FOUND_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "wrong password")) {
+    console_line(T_WIFI_PASSWORD);
+    console_privateLine(ssid, T_WIFI_PASSWORD_DETAIL, ssid);
+    console_line(T_WIFI_PASSWORD_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "no address")) {
+    console_line(T_WIFI_NO_ADDRESS);
+    console_line(T_WIFI_NO_ADDRESS_DETAIL);
+    console_line(T_WIFI_NO_ADDRESS_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "no router") ||
+             chscreen_valueIs(text, "error", "router silent")) {
+    console_line(T_WIFI_ROUTER_FAIL);
+    console_line(T_WIFI_ROUTER_FAIL_DETAIL, value("gateway"));
+    console_line(T_WIFI_ROUTER_FAIL_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "name not found") ||
+             chscreen_valueIs(text, "error", "dns silent")) {
+    console_line(T_WIFI_DNS_FAIL);
+    console_line(T_WIFI_DNS_FAIL_DETAIL, MDTEST_WIFI_HOST, value("dns"),
+                 value("error"));
+    console_line(T_WIFI_DNS_FAIL_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "out of memory")) {
+    console_line(T_WIFI_MEMORY);
+    console_line(T_WIFI_MEMORY_DETAIL, value("error"));
+    console_line(T_WIFI_MEMORY_ADVICE);
+  } else if (has("server")) {
+    console_line(T_WIFI_WEB_FAIL);
+    console_line(T_WIFI_WEB_FAIL_DETAIL, MDTEST_WIFI_HOST, value("server"),
+                 value("error"));
+    console_line(T_WIFI_WEB_FAIL_ADVICE);
+  } else {
+    console_line(T_WIFI_JOIN_FAIL);
+    console_privateLine(ssid, T_WIFI_JOIN_FAIL_DETAIL, ssid, value("error"));
+    console_line(T_WIFI_JOIN_FAIL_ADVICE);
+  }
+}
+
+void devscreen_wifi(void) {
+  console_blank();
+  console_line(T_WIFI_TITLE);
+  console_line(T_WIFI_CHIP);
+  wifiPhase = MDTEST_WIFI_PHASE_CHIP;
+  int state = chscreen_run(MDTEST_TEST_WIFI, noParams, WIFI_POLL_TICKS,
+                           wifiWatch, text);
+  if (state < 0) return;
+  if (chscreen_valueIs(text, "radio", "ok")) {
+    console_line(T_WIFI_RADIO, value("mac"), value("chip_ms"));
+    if (has("chip_firmware")) {
+      console_line(T_WIFI_FIRMWARE, value("chip_firmware"), value("country"));
+    } else {
+      console_line(T_WIFI_COUNTRY, value("country"));
+    }
+  }
+  if (has("networks")) {
+    console_line(T_WIFI_HEARD, value("networks"), value("hidden"));
+    wifiNetworks();
+    const char *ssid = has("ssid") ? value("ssid") : 0;
+    if (ssid && chscreen_valueIs(text, "configured_seen", "yes")) {
+      long rssi = atol(value("configured_rssi"));
+      console_privateLine(ssid, T_WIFI_SEEN, ssid, value("configured_rssi"),
+                          signalLabel(rssi));
+    } else if (ssid) {
+      console_privateLine(ssid, T_WIFI_NOT_SEEN, ssid);
+    }
+  }
+  if (chscreen_valueIs(text, "join", "ok")) {
+    long rssi = has("rssi") ? atol(value("rssi")) : 0;
+    console_line(T_WIFI_JOINED, value("join_ms"),
+                 has("rssi") ? value("rssi") : "?",
+                 has("rssi") ? signalLabel(rssi) : "?");
+    console_line(T_WIFI_ADDR, value("address"), value("mask"));
+    console_line(T_WIFI_GATEWAY, value("gateway"), value("dns"),
+                 value("addressing"));
+  }
+  if (has("router_us")) console_line(T_WIFI_ROUTER_OK, value("router_us"));
+  if (has("dns_ms")) {
+    console_line(T_WIFI_DNS_OK, MDTEST_WIFI_HOST, value("server"),
+                 value("dns_ms"));
+  }
+  if (has("web_ms")) console_line(T_WIFI_WEB_OK, value("web_status"),
+                                  value("web_ms"));
+  if (state == MDTEST_JOB_DONE) {
+    console_blank();
+    console_line(T_WIFI_PASS);
+  } else if (state == MDTEST_JOB_FAILED) {
+    wifiFailure();
+  } else {
+    console_line(T_JOB_FAILED, MDTEST_TEST_WIFI);
+  }
+  if (chscreen_valueIs(text, "networks", "0")) {
+    console_line(T_WIFI_NOTHING);
+    console_line(T_WIFI_NOTHING_ADVICE);
+  }
+  if (has("rssi") && atol(value("rssi")) < WIFI_WEAK_DBM) {
+    console_line(T_WIFI_WEAK);
+    console_line(T_WIFI_WEAK_DETAIL, value("rssi"));
+    console_line(T_WIFI_WEAK_ADVICE);
+  }
+  if (chscreen_valueIs(text, "addressing", "static rejected")) {
+    console_line(T_WIFI_STATIC);
+    console_line(T_WIFI_STATIC_DETAIL, value("static_reason"));
+    console_line(T_WIFI_STATIC_ADVICE);
+  }
 }

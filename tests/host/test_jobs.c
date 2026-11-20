@@ -65,6 +65,30 @@ uint16_t cardtest_step(uint32_t nowMs, uint16_t *progress,
 
 void cardtest_abort(void) { cardAborts++; }
 
+// The Wi-Fi test, the same way (wifitest.c runs under EmuMD).
+static int wifiBegun;
+static int wifiSteps;
+static int wifiAborts;
+
+void wifitest_begin(uint32_t nowMs) {
+  (void)nowMs;
+  wifiBegun++;
+  wifiSteps = 0;
+}
+
+uint16_t wifitest_step(uint32_t nowMs, uint16_t *progress,
+                       uint16_t live[MDTEST_JOB_LIVE_WORDS]) {
+  (void)nowMs;
+  wifiSteps++;
+  *progress = (uint16_t)(wifiSteps * 10);
+  live[0] = (uint16_t)wifiSteps;
+  if (wifiSteps < 2) return MDTEST_JOB_RUNNING;
+  jobs_resultLine("web=ok");
+  return MDTEST_JOB_DONE;
+}
+
+void wifitest_abort(void) { wifiAborts++; }
+
 static int resultHas(const char *line) {
   const JobStatus *s = jobs_status();
   size_t n = strlen(line);
@@ -274,6 +298,32 @@ static void card(void) {
   CHECK_EQ(cardAborts, 1);
 }
 
+static void wifi(void) {
+  jobs_reset();
+  wifiBegun = 0;
+  start(MDTEST_TEST_WIFI, 0, 0);
+  CHECK_EQ(wifiBegun, 1);
+  jobs_poll(1);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_RUNNING);
+  CHECK_EQ(jobs_status()->live[0], 1);
+  CHECK_EQ(jobs_status()->progress, 10);
+  jobs_poll(2);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_DONE);
+  CHECK(resultHas("web=ok"));
+
+  wifiAborts = 0;
+  start(MDTEST_TEST_WIFI, 0, 10);
+  jobs_cancel();
+  CHECK_EQ(wifiAborts, 1);
+  CHECK_EQ(jobs_status()->state, MDTEST_JOB_CANCELLED);
+
+  // Past the last test: unknown.
+  uint16_t number = 0;
+  const uint16_t none[4] = {0, 0, 0, 0};
+  CHECK_EQ(jobs_start(MDTEST_TEST_LAST + 1U, 200, none, 20, &number),
+           MDTEST_STATUS_UNKNOWN);
+}
+
 static const uint16_t twoSeconds[4] = {2, 0, 0, 0};
 
 static void jobs(void) {
@@ -373,6 +423,7 @@ int main(void) {
   led();
   deviceInfo();
   card();
+  wifi();
   text();
   restore();
   versions();

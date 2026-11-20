@@ -9,6 +9,8 @@
 #define REPORT_LINES 200
 
 static char report[REPORT_LINES][LINE_CHARS];
+static unsigned char privateStart[REPORT_LINES];
+static unsigned char privateLength[REPORT_LINES];
 static int reportCount;
 static long nfStderr;
 static int columns;
@@ -143,6 +145,21 @@ void console_line(const char *fmt, ...) {
   emit(text);
 }
 
+void console_privateLine(const char *name, const char *fmt, ...) {
+  char text[LINE_CHARS];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(text, sizeof(text), fmt, args);
+  va_end(args);
+  int line = reportCount;
+  emit(text);
+  const char *at = name[0] ? strstr(text, name) : 0;
+  if (at && line < REPORT_LINES) {
+    privateStart[line] = (unsigned char)(at - text);
+    privateLength[line] = (unsigned char)strlen(name);
+  }
+}
+
 void console_blank(void) { emit(""); }
 
 int console_key(void) {
@@ -155,3 +172,8 @@ int console_key(void) {
 int console_reportLines(void) { return reportCount; }
 
 const char *console_reportLine(int index) { return report[index]; }
+
+int console_reportPrivate(int index, int *start) {
+  *start = privateStart[index];
+  return privateLength[index];
+}

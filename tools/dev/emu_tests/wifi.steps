@@ -1,0 +1,34 @@
+# Wi-Fi to the internet: the chip, the scan with Booster's network heard,
+# joined (any password joins under EmuMD), an address, the router, the
+# name and the web server, then a report saved without the network's name.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key w
+say "^Starting the radio chip" 100
+say "^Listening for networks" 600
+say "^Joining the network set up in Booster" 600
+say "^  Radio     MAC 28:CD:C1:4D:44:01, started in \d+ ms" 3000
+say "^  Networks  1 heard, 0 hidden" 100
+say "^   -45 dBm ch \d+ +WPA2 EmuMD" 100
+say "^  Booster's network EmuMD, -45 dBm \(good\)" 100
+say "^  Joined    in \d+ ms, signal -45 dBm \(good\)" 100
+say "^  Address   10.0.2.15, mask 255.255.255.0" 100
+say "^  Router    10.0.2.2, DNS 10.0.2.3, dhcp" 100
+say "^  Router    answered in \d+ us" 100
+say "^  Name      atarist.sidecartridge.com is [0-9.]+, \d+ ms" 100
+say "^  Web       answered 200 in \d+ ms" 100
+say "^PASS  Wi-Fi works, out to the internet" 100
+nosay "^WARN  (The signal|Booster.s fixed|No network)"
+sayn 3 "^Press a key" 300
+key s
+say "^Keep Wi-Fi network names in the report" 100
+key n
+say "^  names left out" 100
+say "^Report saved as REPORT00.TXT" 500
+floppy REPORT00.TXT "^  Booster's network \(name left out\), -45 dBm \(good\)\r$"
+floppy REPORT00.TXT "^   -45 dBm ch \d+ +WPA2 \(name left out\)\r$"
+floppynot REPORT00.TXT "EmuMD"

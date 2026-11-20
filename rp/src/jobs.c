@@ -15,6 +15,7 @@
 
 #include "cardtest.h"
 #include "devtests.h"
+#include "wifitest.h"
 
 #define PROGRESS_DONE 100U
 #define DUMMY_DEFAULT_SECONDS 10U
@@ -276,6 +277,7 @@ uint16_t jobs_start(uint16_t test, uint16_t seq, const uint16_t p[4],
   if (test == MDTEST_TEST_SD_CARD || test == MDTEST_TEST_SD_SWAP) {
     cardtest_begin(test, params, nowMs);
   }
+  if (test == MDTEST_TEST_WIFI) wifitest_begin(nowMs);
   *number = status.number;
   return MDTEST_STATUS_OK;
 }
@@ -286,6 +288,7 @@ void jobs_cancel(void) {
       status.test == MDTEST_TEST_SD_SWAP) {
     cardtest_abort();
   }
+  if (status.test == MDTEST_TEST_WIFI) wifitest_abort();
   resultLine("cancelled=yes");
   finish(MDTEST_JOB_CANCELLED);
 }
@@ -311,6 +314,11 @@ void jobs_poll(uint32_t nowMs) {
     case MDTEST_TEST_SD_CARD:
     case MDTEST_TEST_SD_SWAP: {
       uint16_t state = cardtest_step(nowMs, &status.progress, status.live);
+      if (state != MDTEST_JOB_RUNNING) finish(state);
+      break;
+    }
+    case MDTEST_TEST_WIFI: {
+      uint16_t state = wifitest_step(nowMs, &status.progress, status.live);
       if (state != MDTEST_JOB_RUNNING) finish(state);
       break;
     }

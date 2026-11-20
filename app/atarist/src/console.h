@@ -31,8 +31,15 @@ void console_wrap(const char *text, int width,
 /* Every line also to mirror (the command channel's log), or none (NULL). */
 void console_setMirror(void (*mirror)(const char *line));
 
+/* A line naming a Wi-Fi network: shown as console_line(), and the name's
+ * place in it kept, so a saved report can leave the name out. */
+void console_privateLine(const char *name, const char *fmt, ...);
+
 /* The report: every line written since the start. */
 int console_reportLines(void);
 const char *console_reportLine(int index);
+
+/* Where a report line names a network: its length, 0 for none. */
+int console_reportPrivate(int index, int *start);
 
 #endif

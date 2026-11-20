@@ -86,6 +86,9 @@
 #define LWIP_TCP 1
 #define LWIP_UDP 1
 #define LWIP_DNS 1
+// A name is kept 1 s at most: the Wi-Fi test asks the DNS server each run
+// (lwIP's cache outlives the chip being powered down and up again).
+#define DNS_MAX_TTL 1
 #define LWIP_TCP_KEEPALIVE 0
 #define LWIP_NETIF_TX_SINGLE_PBUF 1
 #define DHCP_DOES_ARP_CHECK 0

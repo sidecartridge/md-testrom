@@ -19,6 +19,9 @@ void devscreen_card(void);
 /* The microSD card taken out and put back. */
 void devscreen_cardSwap(void);
 
+/* The Wi-Fi test, step by step to the first that fails. */
+void devscreen_wifi(void);
+
 int devscreen_exit(long mch);
 
 #endif
