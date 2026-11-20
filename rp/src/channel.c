@@ -37,6 +37,10 @@ static uint16_t *window;
 static bool selected = false;
 static uint32_t unselectAtUs = 0;
 static bool unselectPending = false;
+// An exit to Booster, answered: taken once the ST has had time to read it.
+static bool exitPending = false;
+static bool exitNow = false;
+static uint32_t exitAtUs = 0;
 static uint32_t bootId = 0;
 static uint16_t answers = 0;
 static uint32_t dataStateAnswers = 0;
@@ -217,8 +221,16 @@ static void jobStatus(void) {
     mdtest_putText(&window[MDTEST_RESULT_BUFFER_INDEX], jobs_result(),
                    length);
   }
-  const uint16_t data[4] = {job->number, job->state, job->progress, job->test};
-  answer(MDTEST_CMD_JOB_STATUS, MDTEST_STATUS_OK, length, data, 4);
+  uint16_t data[MDTEST_JOB_ANS_LIVE + MDTEST_JOB_LIVE_WORDS];
+  data[MDTEST_JOB_ANS_NUMBER] = job->number;
+  data[MDTEST_JOB_ANS_STATE] = job->state;
+  data[MDTEST_JOB_ANS_PROGRESS] = job->progress;
+  data[MDTEST_JOB_ANS_TEST] = job->test;
+  for (unsigned int i = 0; i < MDTEST_JOB_LIVE_WORDS; i++) {
+    data[MDTEST_JOB_ANS_LIVE + i] = job->live[i];
+  }
+  answer(MDTEST_CMD_JOB_STATUS, MDTEST_STATUS_OK, length, data,
+         MDTEST_JOB_ANS_LIVE + MDTEST_JOB_LIVE_WORDS);
 }
 
 static void onCommand(TransmissionProtocol *frame, uint16_t *words) {
@@ -239,8 +251,8 @@ static void onCommand(TransmissionProtocol *frame, uint16_t *words) {
       break;
     case MDTEST_CMD_HELLO: {
       const uint16_t data[3] = {MDTEST_PROTOCOL_VERSION,
-                                (uint16_t)(MDTEST_CAP_DUMMY >> 16),
-                                (uint16_t)MDTEST_CAP_DUMMY};
+                                (uint16_t)(MDTEST_CAPS >> 16),
+                                (uint16_t)MDTEST_CAPS};
       answer(command, MDTEST_STATUS_OK, 0, data, 3);
       if (count >= 3U) {
         DPRINTF("Hello: program protocol %u, machine $%04X%04X\n", words[0],
@@ -297,6 +309,12 @@ static void onCommand(TransmissionProtocol *frame, uint16_t *words) {
     case MDTEST_CMD_COUNTERS:
       counters();
       break;
+    case MDTEST_CMD_EXIT:
+      answer(command, MDTEST_STATUS_OK, 0, NULL, 0);
+      jobs_cancel();
+      exitPending = true;
+      exitAtUs = time_us_32() + UNSELECT_GRACE_US;
+      break;
     default:
       answer(command, MDTEST_STATUS_BAD, 0, NULL, 0);
       break;
@@ -349,6 +367,7 @@ static void pollRequestFile(void) {
 void channel_benchRestart(void) {
   if (selected) unselect();
   unselectPending = false;
+  exitPending = false;
   jobs_reset();
   bootId = 0;
   answers = 0;
@@ -387,6 +406,10 @@ void channel_poll(void) {
     if (unselectPending && (int32_t)(time_us_32() - unselectAtUs) >= 0) {
       unselect();
     }
+    if (exitPending && (int32_t)(time_us_32() - exitAtUs) >= 0) {
+      exitPending = false;
+      exitNow = true;
+    }
   } else {
     commemul_poll(consumeDataStateSample);
   }
@@ -396,3 +419,5 @@ void channel_poll(void) {
 }
 
 bool channel_selected(void) { return selected; }
+
+bool channel_exitRequested(void) { return exitNow; }

@@ -6,6 +6,7 @@ say "^Press a key" 100
 key x
 key o
 say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
 key c
 say "^FAIL  Program and firmware differ" 500
 say "^  protocol: program 2, firmware 1" 100

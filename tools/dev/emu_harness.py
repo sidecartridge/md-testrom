@@ -33,6 +33,7 @@ Steps (--step, or --test NAME for tools/dev/emu_tests/NAME.steps):
   request CODE [TEST P0 P1 P2 P3]
                         the bench's next request to the program
                         (MDTEST_REQUEST_* in common/mdtest.h)
+  select [MS]           SELECT on the device pressed for MS ms (100)
   shot NAME             a screenshot, shots/NAME.png
   floppy NAME REGEX     at the end, with Hatari stopped: the floppy holds
                         the file NAME and its text matches REGEX
@@ -45,8 +46,9 @@ mismatch), "@protect on" (the floppy write-protected) and "@fault KIND A B"
 common/mdtest.h), "@debug" (the program's debug build, which can override
 the gate), "@protocol N" (the program built to speak protocol N), "@drop N"
 (every Nth command runs unanswered), "@bench TEXT" (an MDTEST.BNC holding
-TEXT) and "@twice" (the program twice in the AUTO folder: quitting the first
-starts it again) set those options.
+TEXT), "@twice" (the program twice in the AUTO folder: quitting the first
+starts it again) and "@chipfail" (the radio chip fails to start, as a dead
+one would) set those options.
 
 The run folder, tools/dev/logs/emu/<date>-<setup>-<name>/, keeps
 command.txt, hatari.out, the program's lines (screen.txt), shots/ (end.png
@@ -335,6 +337,12 @@ class Run:
         path = self.hatari.out_path.parent / "request.txt"
         path.write_text(" ".join(words) + "\n")
 
+    def step_select(self, ms="100"):
+        # SELECT pressed for MS ms: the firmware reads the file
+        # EMU_SELECT_FILE names, then deletes it (emu/standins.c).
+        path = self.hatari.out_path.parent / "select.txt"
+        path.write_text(f"{int(ms)}\n")
+
     def step_shot(self, name):
         self.hatari.shot(name)
 
@@ -363,7 +371,7 @@ def check_floppy(checks, files_dir):
 
 
 OPTIONS = ("hatari", "monitor", "memsize", "layout", "protect", "fault", "debug",
-           "protocol", "drop", "bench", "twice")
+           "protocol", "drop", "bench", "twice", "chipfail")
 
 
 def parse_steps(name, lines, opts):
@@ -437,7 +445,10 @@ def run_one(setup, tests, extra_steps, disk, timeout):
         env["MDTEST_FAULT"] = opts["fault"]
     if opts.get("drop"):
         env["MDTEST_DROP"] = opts["drop"]
+    if "chipfail" in opts:
+        env["MDTEST_CHIP_FAIL"] = "1"
     env["MDTEST_REQUEST_FILE"] = str(run_dir / "request.txt")
+    env["EMU_SELECT_FILE"] = str(run_dir / "select.txt")
     (run_dir / "command.txt").write_text(shlex.join(cmd) + "\n")
     print(f"emu_harness: {setup} {name}: {run_dir.relative_to(ROOT)}", flush=True)
 

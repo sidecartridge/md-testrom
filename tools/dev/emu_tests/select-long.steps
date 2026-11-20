@@ -1,0 +1,15 @@
+# A press held towards the factory reset: the warning shows, and a release
+# before 10 s still passes.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key p
+say "^Press SELECT on the device once" 500
+select 7000
+say "^  SELECT pressed" 500
+say "^WARN  Release SELECT now" 400
+say "^  SELECT released" 500
+say "^PASS  SELECT works" 500

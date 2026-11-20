@@ -136,8 +136,9 @@
 // last start's sequence number answers that job again and starts nothing.
 #define MDTEST_CMD_JOB_START ((MDTEST_APP_ID << 8) | 0x06U)
 // Answer: MDTEST_ANS_DATA = the job's number, state (MDTEST_JOB_*), progress
-// (0 to 100), test; once it has ended its result is in the result buffer,
-// MDTEST_ANS_LENGTH bytes of "key=value" lines.
+// (0 to 100), test, its live words (MDTEST_JOB_ANS_*); once it has ended its
+// result is in the result buffer, MDTEST_ANS_LENGTH bytes of "key=value"
+// lines.
 #define MDTEST_CMD_JOB_STATUS ((MDTEST_APP_ID << 8) | 0x07U)
 #define MDTEST_CMD_JOB_CANCEL ((MDTEST_APP_ID << 8) | 0x08U)
 // Words: the sequence number (MDTEST_ANS_SEQ), the length in bytes, then the
@@ -158,6 +159,10 @@
 // Answer: the RP's command counters in the result buffer, MDTEST_COUNTERS_*
 // order, each a long (high word first).
 #define MDTEST_CMD_COUNTERS ((MDTEST_APP_ID << 8) | 0x0BU)
+// Answered, then the device leaves for Booster as a short SELECT press does
+// (a running job is cancelled first). The ST then reads Booster's cartridge,
+// not this window: the program asks the user to reset it.
+#define MDTEST_CMD_EXIT ((MDTEST_APP_ID << 8) | 0x0CU)
 
 // The answer record, at $FA2100 (after the template's block): every app
 // command's answer, written before its token.
@@ -182,9 +187,48 @@
 
 // Capabilities: the tests this build has.
 #define MDTEST_CAP_DUMMY 0x00000001UL
+#define MDTEST_CAP_DEVICE_INFO 0x00000002UL
+#define MDTEST_CAP_SELECT 0x00000004UL
+#define MDTEST_CAP_LED 0x00000008UL
+#define MDTEST_CAP_EXIT 0x00000010UL
+#define MDTEST_CAPS                                                     \
+  (MDTEST_CAP_DUMMY | MDTEST_CAP_DEVICE_INFO | MDTEST_CAP_SELECT |      \
+   MDTEST_CAP_LED | MDTEST_CAP_EXIT)
 
 // The tests a job runs.
 #define MDTEST_TEST_DUMMY 1U  // parameters: seconds; result: seconds, steps
+// The device's identity and health: "key=value" lines, read only (nothing
+// is written, and Booster's Wi-Fi password is never read).
+#define MDTEST_TEST_DEVICE_INFO 2U
+// SELECT watched for parameter 0 seconds (MDTEST_SELECT_SECONDS if 0): done
+// at the first press and release, failed with no press or a button held from
+// the start. While it runs a short press is reported, not acted on; a press
+// held MDTEST_SELECT_RESET_MS is still the factory reset. Live words: the
+// level (1 pressed), the current press's length in ms, the presses so far.
+#define MDTEST_TEST_SELECT 3U
+#define MDTEST_SELECT_SECONDS 20U
+#define MDTEST_SELECT_MAX_SECONDS 60U
+#define MDTEST_SELECT_STUCK_MS 2000U   // pressed from the start this long
+#define MDTEST_SELECT_RESET_MS 10000U  // the factory reset
+// The green LED, switched through the Pico W's radio chip (started the first
+// time): parameter 0 is MDTEST_LED_*. Blink runs until cancelled (at most
+// MDTEST_LED_BLINK_MAX_S). Release leaves it as the firmware started: off,
+// the chip powered down. Live word 0: the LED as last set (1 on).
+#define MDTEST_TEST_LED 4U
+#define MDTEST_LED_OFF 0U
+#define MDTEST_LED_ON 1U
+#define MDTEST_LED_BLINK 2U
+#define MDTEST_LED_RELEASE 3U
+#define MDTEST_LED_BLINK_MAX_S 60U
+#define MDTEST_LED_BLINK_MS 500U
+
+// A job's status answer: MDTEST_ANS_DATA + these words.
+#define MDTEST_JOB_ANS_NUMBER 0U
+#define MDTEST_JOB_ANS_STATE 1U
+#define MDTEST_JOB_ANS_PROGRESS 2U
+#define MDTEST_JOB_ANS_TEST 3U
+#define MDTEST_JOB_ANS_LIVE 4U  // the test's live words
+#define MDTEST_JOB_LIVE_WORDS 3U
 
 #define MDTEST_JOB_IDLE 0U
 #define MDTEST_JOB_RUNNING 1U

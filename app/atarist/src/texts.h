@@ -136,7 +136,6 @@
 
 #define T_MENU_LINE_LONG "[K] Line test, long pass"
 #define T_MENU_LINE_MSTE "[M] Line test at 8, 16, 16+cache MHz"
-#define T_MENU_UNLOCKED "    Device tests: unlocked"
 #define T_MENU_OVERRIDE "[O] Override the gate (debug build)"
 #define T_BENCH "Bench mode: the line test in a loop."
 #define T_BENCH_RUN "Run %lu"
@@ -198,5 +197,102 @@
 #define T_JOB_FAILED_DETAIL "  job %u, state %u"
 #define T_JOB_RESTARTED "FAIL  The device restarted during test %u."
 #define T_JOB_RESTARTED_DETAIL "  ROM3 is test data again: the job is lost"
+
+/* The device's own tests. */
+#define T_MENU_INFO "[I] Device information"
+#define T_MENU_SELECT "[P] SELECT button"
+#define T_MENU_LED "[G] Green LED"
+#define T_MENU_EXIT "[B] Back to Booster"
+#define T_YES "yes"
+#define T_NO "no"
+
+#define T_INFO_TITLE "Device information"
+#define T_INFO_FIRMWARE "  Firmware  %s, build %s"
+#define T_INFO_BOARD "  Board     Pico W, ID %s"
+#define T_INFO_FLASH "  Flash     %s KB"
+#define T_INFO_CLOCK_MV "  Clock     %s MHz, core %s mV"
+#define T_INFO_CLOCK "  Clock     %s MHz"
+#define T_INFO_TEMP "  Chip      %s C"
+#define T_INFO_UPTIME "  Running   %s s"
+#define T_INFO_HEAP "  Heap      %s bytes free, %s lowest"
+#define T_INFO_STACK "  Stack     %s of %s bytes used"
+#define T_INFO_RESTART "  Started   %s"
+#define T_INFO_RESTART_PHASE "    while: %s"
+#define T_INFO_RESTART_PC "    at: %s"
+#define T_INFO_RESTART_POWER "at power-on"
+#define T_INFO_RESTART_RESET "after a reset asked for"
+#define T_INFO_RESTART_PANIC "after a firmware panic"
+#define T_INFO_RESTART_FAULT "after a firmware crash"
+#define T_INFO_RESTART_HANG "after a hang (watchdog)"
+#define T_INFO_RESTART_OTHER "after a reboot"
+#define T_INFO_HOSTNAME "  Hostname  %s"
+#define T_INFO_WIFI "  Wi-Fi     %s"
+#define T_INFO_WIFI_SET "a network is set up"
+#define T_INFO_WIFI_NONE "no network set up"
+#define T_INFO_SD "  microSD   %s KB/s"
+#define T_INFO_PASS "PASS  The device reports no problem."
+#define T_INFO_WARN_CRASH "WARN  The device restarted after a crash."
+#define T_INFO_WARN_CRASH_DETAIL "  last restart: %s"
+#define T_INFO_WARN_CRASH_ADVICE \
+  "If this happens again, save the report and send it to support."
+#define T_INFO_WARN_LOOP "WARN  The device keeps restarting."
+#define T_INFO_WARN_LOOP_DETAIL "  %s crash restarts in a minute"
+#define T_INFO_WARN_TEMP "WARN  The device's chip is out of range."
+#define T_INFO_WARN_TEMP_DETAIL "  %s C, expected %d to %d C"
+#define T_INFO_WARN_SETTINGS "WARN  Booster's settings could not be read."
+#define T_INFO_WARN_SETTINGS_ADVICE \
+  "Open Booster and save its settings again."
+
+#define T_SEL_TITLE "SELECT button"
+#define T_SEL_ASK "Press SELECT on the device once and release it (%u s)."
+#define T_SEL_PRESSED "  SELECT pressed"
+#define T_SEL_RELEASED "  SELECT released"
+#define T_SEL_WARN_RESET "WARN  Release SELECT now."
+#define T_SEL_WARN_RESET_DETAIL \
+  "  held 10 s it resets the device to factory settings"
+#define T_SEL_PASS "PASS  SELECT works."
+#define T_SEL_PASS_DETAIL "  pressed for %s ms"
+#define T_SEL_AFTER "Outside this test, a press goes back to Booster."
+#define T_SEL_STUCK "FAIL  SELECT reads pressed all the time."
+#define T_SEL_STUCK_DETAIL "  pressed from the start, %s ms"
+#define T_SEL_STUCK_ADVICE \
+  "Check the button is not stuck down; if it is not, the button is faulty."
+#define T_SEL_NONE "FAIL  No SELECT press was seen."
+#define T_SEL_NONE_DETAIL "  waited %u s: %s"
+#define T_SEL_NONE_ADVICE \
+  "Press SELECT firmly and test again; if it still fails, the button or " \
+  "its contacts are faulty."
+
+#define T_LED_TITLE "Green LED"
+#define T_LED_STARTING "Starting the radio chip, which drives the LED."
+#define T_LED_CHIP_STARTED "  radio chip started in %s ms"
+#define T_LED_CHIP_HEAP "  it took %s bytes of memory"
+#define T_LED_ASK_ON "Is the green LED on? [Y/N]"
+#define T_LED_ASK_OFF "Is the green LED off now? [Y/N]"
+#define T_LED_ASK_BLINK "Is the green LED blinking? [Y/N]"
+#define T_LED_ANSWER_YES "  yes"
+#define T_LED_ANSWER_NO "  no"
+#define T_LED_PASS "PASS  The green LED works."
+#define T_LED_FAIL "FAIL  The LED does not do what it is told."
+#define T_LED_FAIL_DETAIL "  on: %s, off: %s, blinking: %s"
+#define T_LED_FAIL_ADVICE \
+  "The radio chip answers, so the LED or its wiring on the Pico W is " \
+  "faulty."
+#define T_LED_NO_CHIP "FAIL  The radio chip does not answer."
+#define T_LED_NO_CHIP_DETAIL "  error %s"
+#define T_LED_NO_CHIP_ADVICE \
+  "The Pico W's radio chip is faulty: Wi-Fi and Bluetooth will fail too."
+#define T_LED_CHIP_ERROR "FAIL  The radio chip did not take the LED."
+#define T_LED_CHIP_ERROR_DETAIL "  %s, error %s"
+#define T_LED_CHIP_ERROR_ADVICE \
+  "The Pico W's radio chip is faulty: Wi-Fi and Bluetooth may fail too."
+
+#define T_EXIT_TITLE "Back to Booster"
+#define T_EXIT_DONE "The device is restarting into Booster."
+#define T_EXIT_ADVICE \
+  "Reset the computer, or switch it off and on, to use Booster."
+#define T_EXIT_FAIL "FAIL  The device did not answer."
+#define T_EXIT_FAIL_ADVICE "Press SELECT on the device to go back to Booster."
+#define T_EXIT_QUIT "Press a key to quit."
 
 #endif

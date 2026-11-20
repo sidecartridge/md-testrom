@@ -15,8 +15,10 @@
 #include "channel.h"
 #include "commemul.h"
 #include "build_id.h"
+#include "devtests.h"
 #include "gconfig.h"
 #include "health.h"
+#include "jobs.h"
 #include "mdtest.h"
 
 // Included in this file only: it holds the definitions.
@@ -40,7 +42,15 @@ static void serveFault(unsigned int kind, unsigned int a, unsigned int b) {
 // Set by a short SELECT press, handled by the main loop.
 static volatile bool leaveForBooster = false;
 
-void emul_selectShortPress(void) { leaveForBooster = true; }
+// While the SELECT test runs, a short press is the test's: it is reported,
+// not acted on. The long press (the factory reset) is never held back.
+void emul_selectShortPress(void) {
+  if (jobs_selectOwnsPress(to_ms_since_boot(get_absolute_time()))) {
+    DPRINTF("SELECT pressed during its test: reported, not acted on\n");
+    return;
+  }
+  leaveForBooster = true;
+}
 
 // Nothing of this app's runs past a reset or the jump to Booster: the bus
 // engine and the command ring stop first (the jump itself masks and clears
@@ -104,6 +114,12 @@ static uint32_t emul_devhooksApp(uint16_t commandId, const uint16_t *payload,
       return 1;
     case DEVHOOKS_APP_RESTART:
       channel_benchRestart();
+      return 1;
+    case DEVHOOKS_APP_CHIP_FAIL:
+      if (payloadSize < 2U) return 0;
+      devtestsChipFails = payload[0] != 0U;
+      DPRINTF("The radio chip %s\n",
+              devtestsChipFails ? "fails to start" : "starts as it should");
       return 1;
     case DEVHOOKS_APP_HEALTH:
       if (payloadSize < 2U || payload[0] == HEALTH_TEST_NONE ||
@@ -169,6 +185,8 @@ void emul_start() {
     extern uint32_t chandlerDropEvery;
     const char *drop = getenv("MDTEST_DROP");
     if (drop) chandlerDropEvery = (uint32_t)strtoul(drop, NULL, 10);
+    // MDTEST_CHIP_FAIL: the radio chip fails to start (the LED test).
+    if (getenv("MDTEST_CHIP_FAIL")) devtestsChipFails = true;
   }
 #endif
 
@@ -189,7 +207,7 @@ void emul_start() {
   select_setLongResetCallback(emul_quiesceAndFactoryReset);
 
   // The LED stays off, as in v0.0.3 (whose blink_on() was never compiled in):
-  // on a Pico W it belongs to the radio chip, which nothing starts at boot.
+  // on a Pico W it belongs to the radio chip, which only the LED test starts.
 
 #if defined(_DEBUG) && (_DEBUG != 0)
   // Debug builds only: serve the SWD mailbox of tools/dev/swd.py
@@ -197,7 +215,7 @@ void emul_start() {
 #endif
 
   DPRINTF("Start the app loop here\n");
-  while (!leaveForBooster) {
+  while (!leaveForBooster && !channel_exitRequested()) {
     health_feed();
     health_setPhase(HEALTH_PHASE_MAIN_LOOP);
     devhooks_poll();
@@ -205,12 +223,16 @@ void emul_start() {
     // The ROM3 capture on every pass: test data (frames parsed, only the
     // select frame answered), or the command channel and its jobs.
     channel_poll();
+    // The radio chip's driver, while the LED test has it up.
+    devtests_poll();
     // Heap sampling, the debug summary and the debug test hooks
     health_tick();
   }
 
   // Booster takes over at its next boot.
-  DPRINTF("SELECT pressed: jumping to the booster app...\n");
+  DPRINTF("%s: jumping to the booster app...\n",
+          leaveForBooster ? "SELECT pressed" : "The ST asked");
+  devtests_ledRelease();
   emul_quiesce();
   settings_put_string(gconfig_getContext(), PARAM_BOOT_FEATURE, "BOOSTER");
   settings_save(gconfig_getContext(), true);

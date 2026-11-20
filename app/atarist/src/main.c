@@ -12,6 +12,7 @@
 #include "chscreen.h"
 #include "commands.h"
 #include "console.h"
+#include "devscreen.h"
 #include "device.h"
 #include "ltscreen.h"
 #include "machine.h"
@@ -118,7 +119,9 @@ static void showMenu(int lineTestReady) {
   }
   if (linePassed || overridden) console_line(T_MENU_CHANNEL);
   if (unlocked) {
-    console_line(T_MENU_UNLOCKED);
+    console_line(T_MENU_INFO);
+    console_line(T_MENU_SELECT);
+    console_line(T_MENU_LED);
   } else if (linePassed) {
     console_line(T_MENU_LOCKED1);
     console_line(T_MENU_CHANNEL_NEXT);
@@ -129,6 +132,7 @@ static void showMenu(int lineTestReady) {
 #ifdef MDTEST_DEBUG
   if (!unlocked) console_line(T_MENU_OVERRIDE);
 #endif
+  if (device.kind == DEVICE_TEST) console_line(T_MENU_EXIT);
   console_line(T_MENU_SAVE);
   console_line(T_MENU_QUIT);
   console_line(T_MENU_PROMPT);
@@ -310,6 +314,21 @@ static void run(void) {
       lineTestMegaSte();
     } else if (key == 'c' && (linePassed || overridden)) {
       channelTest();
+    } else if (unlocked && (key == 'i' || key == 'p' || key == 'g')) {
+      console_blank();
+      if (chscreen_open(machine.mch)) {
+        if (key == 'i') devscreen_info();
+        if (key == 'p') devscreen_select();
+        if (key == 'g') devscreen_led();
+      }
+    } else if (key == 'b' && device.kind == DEVICE_TEST) {
+      if (devscreen_exit(machine.mch)) {
+        /* The cartridge port is Booster's: quit without reading it. */
+        console_line(T_EXIT_QUIT);
+        (void)console_key();
+        Cconws("\033e");
+        return;
+      }
 #ifdef MDTEST_DEBUG
     } else if (key == 'o' && !unlocked) {
       console_line(T_GATE_OVERRIDE);

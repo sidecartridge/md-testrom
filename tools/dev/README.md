@@ -39,7 +39,7 @@ What differs here:
   `text`, `key`, `type` and `st-reset` say they do not apply and exit 1.
 - **The command channel runs once the program selects ROM3.** `swd.py counters` and `ring` show
   what the capture and the parser made of the ST's ROM3 reads; `inject` and `app` (`heap_hold`,
-  `health`, and this app's `fault`, `drop`, `select`, `restart`) work on debug builds, and
+  `health`, and this app's `fault`, `drop`, `select`, `restart`, `chip_fail`) work on debug builds, and
   injected commands answer only while ROM3 is selected (`app select 1`). `app restart` is an RP
   restart as the ST sees it (ROM3 test data again, the job gone, a new boot ID) with no reset:
   `swd.py reset` while a program reads the cartridge crashes the ST, as a flash does. `swd.py log` shows the program's screen
@@ -111,14 +111,18 @@ test serves the window as that faulty bus would (`MDTEST_FAULT`), to check the l
 command channel's tests override the gate), `@drop N` loses every Nth answer (`MDTEST_DROP`),
 `@protocol N` builds a program that speaks protocol N, `@bench TEXT` puts an `MDTEST.BNC` holding
 TEXT on the floppy, `@twice` puts the program in the AUTO folder twice (quitting the first starts
-it again), and the step `request CODE ...` hands the program a bench request (`request 255`: the
-firmware restarts as the ST sees it, `app restart`).
+it again), `@chipfail` makes the radio chip fail to start (the LED test's third verdict), the step
+`request CODE ...` hands the program a bench request (`request 255`: the firmware restarts as the
+ST sees it, `app restart`), and `select MS` holds SELECT down for MS ms.
 
 The command channel, with no ST: `job.py run dummy 2 --expect seconds=2` selects ROM3 through
 the debug hook, runs a job by injected commands, reads its result from the window and gives ROM3
 back (`tools_harness.py --channel` adds hello, echo and the window afterwards). With the ST in
 bench mode (`MDTEST.BNC` holding `requests`): `st_loop.py run dummy 2 --expect seconds=2 --times
 10`, or the same with `--emu st-104` under EmuMD.
+
+The device tests run the same way: `job.py run device_info`, `job.py run select 10` (press
+SELECT within 10 s), `job.py run led 1` (on; 0 off, 2 blink, 3 off and the chip powered down).
 
 On the device, `swd.py verdict` reads the last line-test verdict the ST sent, and
 `bus_faults.py` serves each fault in turn (`swd.py app fault`) while `MDTEST.TOS` runs in bench
@@ -213,6 +217,7 @@ python3 tools/dev/swd.py resume                                  # release cores
 python3 tools/dev/swd.py reset                                   # reset the whole chip, watchdog-style
 python3 tools/dev/swd.py select short                            # press SELECT (short press)
 python3 tools/dev/select_harness.py bounce                       # 15 ms press: ignored
+python3 tools/dev/select_harness.py during-test                  # press in the SELECT test: reported
 python3 tools/dev/select_harness.py short                        # short press: the RP restarts
 python3 tools/dev/select_harness.py backup settings.bin          # save the settings flash
 python3 tools/dev/select_harness.py long --force                 # 10 s press: factory reset
