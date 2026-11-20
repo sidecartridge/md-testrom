@@ -193,10 +193,11 @@
 #define MDTEST_CAP_EXIT 0x00000010UL
 #define MDTEST_CAP_SD_CARD 0x00000020UL
 #define MDTEST_CAP_SD_SWAP 0x00000040UL
+#define MDTEST_CAP_WIFI 0x00000080UL
 #define MDTEST_CAPS                                                     \
   (MDTEST_CAP_DUMMY | MDTEST_CAP_DEVICE_INFO | MDTEST_CAP_SELECT |      \
    MDTEST_CAP_LED | MDTEST_CAP_EXIT | MDTEST_CAP_SD_CARD |              \
-   MDTEST_CAP_SD_SWAP)
+   MDTEST_CAP_SD_SWAP | MDTEST_CAP_WIFI)
 
 // The tests a job runs.
 #define MDTEST_TEST_DUMMY 1U  // parameters: seconds; result: seconds, steps
@@ -246,7 +247,24 @@
 #define MDTEST_SD_SWAP_OUT 1U    // waiting for it to be taken out
 #define MDTEST_SD_SWAP_IN 2U     // waiting for it to be put back
 #define MDTEST_SD_SWAP_MOUNT 3U  // back: started and mounted again
-#define MDTEST_TEST_LAST MDTEST_TEST_SD_SWAP
+// Wi-Fi, one step after another until the first that fails: the radio chip
+// started, a scan, the network Booster was set up for joined, an address,
+// the router asked, a name looked up, a web server asked (MDTEST_WIFI_HOST).
+// Live words: the phase (MDTEST_WIFI_PHASE_*), the networks heard, the
+// seconds in the phase.
+#define MDTEST_TEST_WIFI 7U
+#define MDTEST_WIFI_HOST "atarist.sidecartridge.com"
+#define MDTEST_WIFI_PATH "/apps.json"
+#define MDTEST_WIFI_NETWORKS_LISTED 8U  // the strongest, in the result
+#define MDTEST_WIFI_PHASE_CHIP 0U
+#define MDTEST_WIFI_PHASE_SCAN 1U
+#define MDTEST_WIFI_PHASE_JOIN 2U
+#define MDTEST_WIFI_PHASE_ADDRESS 3U
+#define MDTEST_WIFI_PHASE_ROUTER 4U
+#define MDTEST_WIFI_PHASE_DNS 5U
+#define MDTEST_WIFI_PHASE_WEB 6U
+#define MDTEST_WIFI_PHASES 7U
+#define MDTEST_TEST_LAST MDTEST_TEST_WIFI
 
 // A job's status answer: MDTEST_ANS_DATA + these words.
 #define MDTEST_JOB_ANS_NUMBER 0U

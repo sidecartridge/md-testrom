@@ -1,0 +1,14 @@
+# The radio chip does not start: the first step fails, nothing after.
+@chipfail
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key w
+say "^Starting the radio chip" 100
+say "^FAIL  The radio chip does not answer" 600
+say "^  no answer when started" 100
+nosay "^Listening for networks"
+nosay "^  Radio"

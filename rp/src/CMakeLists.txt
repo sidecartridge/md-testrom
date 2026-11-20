@@ -120,6 +120,7 @@ target_sources(${PROJECT_NAME} PRIVATE
         blink.c
         cardhw.c
         cardtest.c
+        wifitest.c
         chandler.c
         channel.c
         commemul.c

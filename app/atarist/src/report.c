@@ -9,6 +9,7 @@
 
 #define MAX_REPORTS 100
 #define REPORT_COLUMNS 81 /* lines of 80 characters at most */
+#define REPORT_LINE_BYTES 200
 
 typedef struct {
   short handle;
@@ -27,6 +28,30 @@ static long writeText(short handle, const char *text) {
 static void putFile(const char *line, void *ctx) {
   Writer *w = ctx;
   if (w->error == 0) w->error = writeText(w->handle, line);
+}
+
+/* Wi-Fi network names go into a report only if the user agrees. */
+static int askKeepNames(void) {
+  console_line(T_SAVE_ASK_NAMES);
+  for (;;) {
+    int key = console_key();
+    if (key == 'y' || key == 'n') {
+      console_line(key == 'y' ? T_SAVE_NAMES_KEPT : T_SAVE_NAMES_LEFT_OUT);
+      return key == 'y';
+    }
+  }
+}
+
+/* A report line, with a network's name replaced unless it is kept. */
+static const char *reportLine(int index, int keepNames) {
+  static char out[REPORT_LINE_BYTES];
+  const char *line = console_reportLine(index);
+  int start;
+  int length = console_reportPrivate(index, &start);
+  if (keepNames || length == 0) return line;
+  snprintf(out, sizeof(out), "%.*s%s%s", start, line, T_NETWORK_LEFT_OUT,
+           line + start + length);
+  return out;
 }
 
 void report_save(const char *gate) {
@@ -49,6 +74,14 @@ void report_save(const char *gate) {
 
   /* The lines to write, counted now: the outcome is printed after. */
   int lines = console_reportLines();
+  int keepNames = 1;
+  for (int i = 0; i < lines; i++) {
+    int start;
+    if (console_reportPrivate(i, &start)) {
+      keepNames = askKeepNames();
+      break;
+    }
+  }
   long handle = Fcreate(name, 0);
   long error = handle;
   if (handle >= 0) {
@@ -56,7 +89,7 @@ void report_save(const char *gate) {
     putFile(T_REPORT_FORMAT, &w);
     putFile(gate, &w);
     for (int i = 0; i < lines && w.error == 0; i++) {
-      console_wrap(console_reportLine(i), REPORT_COLUMNS, putFile, &w);
+      console_wrap(reportLine(i, keepNames), REPORT_COLUMNS, putFile, &w);
     }
     long closed = Fclose((short)handle);
     error = w.error ? w.error : closed;

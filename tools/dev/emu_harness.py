@@ -52,8 +52,9 @@ the gate), "@protocol N" (the program built to speak protocol N), "@drop N"
 TEXT), "@twice" (the program twice in the AUTO folder: quitting the first
 starts it again), "@chipfail" (the radio chip fails to start, as a dead
 one would), "@cardfault N" (the microSD card fails as CARDTEST_FAULT_N in
-rp/src/include/cardtest.h) and "@sdapps" (Booster's apps folder on the card)
-set those options. The card's folder always holds one file of the user's,
+rp/src/include/cardtest.h), "@sdapps" (Booster's apps folder on the card),
+"@wifi HOW" (EmuMD's Wi-Fi: badauth, nonet, fail or off) and "@rssi DBM"
+(the signal it reports) set those options. The card's folder always holds one file of the user's,
 USER.TXT.
 
 The run folder, tools/dev/logs/emu/<date>-<setup>-<name>/, keeps
@@ -378,6 +379,9 @@ class Run:
     def step_nofloppy(self, name):
         self.after.append(("nofloppy", name, None))
 
+    def step_floppynot(self, name, regex):
+        self.after.append(("floppynot", name, regex))
+
 
 def sd_listing(sd_dir):
     """Every file and folder under the card's folder, with its contents."""
@@ -406,14 +410,17 @@ def check_floppy(checks, files_dir, sd_dir=None, sd_before=None):
             ok, detail = False, f"no {name} on the floppy"
         else:
             text = path.read_bytes().decode("ascii", "replace")
-            ok = re.search(regex, text, re.M) is not None
-            detail = None if ok else f"{name} does not match /{regex}/"
+            found = re.search(regex, text, re.M) is not None
+            ok = found if kind == "floppy" else not found
+            detail = None if ok else (f"{name} does not match /{regex}/" if kind == "floppy"
+                                      else f"{name} matches /{regex}/")
         results.append((f"{kind} {name}" + (f" {regex}" if regex else ""), ok, detail))
     return results
 
 
 OPTIONS = ("hatari", "monitor", "memsize", "layout", "protect", "fault", "debug",
-           "protocol", "drop", "bench", "twice", "chipfail", "cardfault", "sdapps")
+           "protocol", "drop", "bench", "twice", "chipfail", "cardfault", "sdapps",
+           "wifi", "rssi")
 
 
 def parse_steps(name, lines, opts):
@@ -457,6 +464,10 @@ def hatari_command(setup, opts, run_dir, floppy):
             (run_dir / "sd/apps").mkdir()
         cmd += ["--md-sd", str(run_dir / "sd"), "--md-verbose", "on",
                 "--md-firmware", str(PLUGIN)]
+        if opts.get("wifi"):
+            cmd += ["--md-option", f"wifi={opts['wifi']}"]
+        if opts.get("rssi"):
+            cmd += ["--md-option", f"wifi_rssi={opts['rssi']}"]
     return cmd
 
 

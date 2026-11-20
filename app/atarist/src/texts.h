@@ -150,6 +150,10 @@
 #define T_SAVE_FAILED_DETAIL "  %s: GEMDOS error %ld"
 #define T_SAVE_ADVICE "Check the disk is not write-protected or full."
 #define T_SAVE_NONAME "  no free name REPORT00.TXT to REPORT99.TXT"
+#define T_SAVE_ASK_NAMES "Keep Wi-Fi network names in the report? [Y/N]"
+#define T_SAVE_NAMES_KEPT "  names kept"
+#define T_SAVE_NAMES_LEFT_OUT "  names left out"
+#define T_NETWORK_LEFT_OUT "(name left out)"
 
 #define T_REPORT_FORMAT "MDTEST REPORT 1"
 /* The report's second line, whatever was run: the gate's state. */
@@ -204,6 +208,7 @@
 #define T_MENU_LED "[G] Green LED"
 #define T_MENU_CARD "[D] microSD card"
 #define T_MENU_CARD_SWAP "[R] microSD card out and back in"
+#define T_MENU_WIFI "[W] Wi-Fi"
 #define T_MENU_EXIT "[B] Back to Booster"
 #define T_YES "yes"
 #define T_NO "no"
@@ -365,6 +370,83 @@
   "card test to see why it does not answer."
 #define T_SWAP_UNUSABLE "FAIL  The card came back but cannot be used."
 #define T_SWAP_UNUSABLE_ADVICE "Run the microSD card test to see why."
+
+#define T_WIFI_TITLE "Wi-Fi"
+#define T_WIFI_CHIP "Starting the radio chip..."
+#define T_WIFI_SCAN "Listening for networks..."
+#define T_WIFI_JOIN "Joining the network set up in Booster..."
+#define T_WIFI_ADDRESS "  Joined; asking for an address..."
+#define T_WIFI_ROUTER "Asking the router..."
+#define T_WIFI_DNS "Looking up %s..."
+#define T_WIFI_WEB "Asking %s for a page..."
+#define T_WIFI_RADIO "  Radio     MAC %s, started in %s ms"
+#define T_WIFI_FIRMWARE "  Firmware  %s, country %s"
+#define T_WIFI_COUNTRY "  Country   %s"
+#define T_WIFI_HEARD "  Networks  %s heard, %s hidden"
+#define T_WIFI_NET "  %4s dBm ch %-2s %-4s %s"
+#define T_WIFI_SEEN "  Booster's network %s, %s dBm (%s)"
+#define T_WIFI_NOT_SEEN "  Booster's network %s, not heard"
+#define T_WIFI_JOINED "  Joined    in %s ms, signal %s dBm (%s)"
+#define T_WIFI_ADDR "  Address   %s, mask %s"
+#define T_WIFI_GATEWAY "  Router    %s, DNS %s, %s"
+#define T_WIFI_ROUTER_OK "  Router    answered in %s us"
+#define T_WIFI_DNS_OK "  Name      %s is %s, %s ms"
+#define T_WIFI_WEB_OK "  Web       answered %s in %s ms"
+#define T_WIFI_PASS "PASS  Wi-Fi works, out to the internet."
+#define T_WIFI_WEAK "WARN  The signal is weak."
+#define T_WIFI_WEAK_DETAIL "  %s dBm"
+#define T_WIFI_WEAK_ADVICE \
+  "Move the device and the access point closer, or away from metal."
+#define T_WIFI_STATIC "WARN  Booster's fixed address was refused."
+#define T_WIFI_STATIC_DETAIL "  %s; DHCP used instead"
+#define T_WIFI_STATIC_ADVICE \
+  "Check the address, mask and router in Booster's Wi-Fi settings."
+#define T_WIFI_NOTHING "WARN  No network was heard at all."
+#define T_WIFI_NOTHING_ADVICE \
+  "Check the antenna end of the device is not covered or near metal."
+#define T_WIFI_CHIP_FAIL "FAIL  The radio chip does not answer."
+#define T_WIFI_CHIP_FAIL_DETAIL "  no answer when started"
+#define T_WIFI_CHIP_FAIL_ADVICE \
+  "Switch the computer off and on; if it stays silent, the Pico W's radio " \
+  "is faulty."
+#define T_WIFI_SCAN_FAIL "FAIL  The radio cannot scan for networks."
+#define T_WIFI_SCAN_FAIL_DETAIL "  error %s"
+#define T_WIFI_SCAN_FAIL_ADVICE \
+  "Test again; if it keeps failing, the radio chip is faulty."
+#define T_WIFI_NONE "FAIL  No Wi-Fi network is set up."
+#define T_WIFI_NONE_DETAIL "  Booster has no network name"
+#define T_WIFI_NONE_ADVICE "Set up Wi-Fi in Booster, then test again."
+#define T_WIFI_NOT_FOUND "FAIL  Booster's network is not in range."
+#define T_WIFI_NOT_FOUND_DETAIL "  %s not found"
+#define T_WIFI_NOT_FOUND_ADVICE \
+  "Check the access point is on, near, on 2.4 GHz (the device has no " \
+  "5 GHz) and shows its name."
+#define T_WIFI_PASSWORD "FAIL  The network refused the password."
+#define T_WIFI_PASSWORD_DETAIL "  %s: wrong password"
+#define T_WIFI_PASSWORD_ADVICE "Enter the Wi-Fi password again in Booster."
+#define T_WIFI_JOIN_FAIL "FAIL  The device could not join the network."
+#define T_WIFI_JOIN_FAIL_DETAIL "  %s: %s"
+#define T_WIFI_JOIN_FAIL_ADVICE \
+  "Check the access point takes new devices with WPA2, then test again."
+#define T_WIFI_NO_ADDRESS "FAIL  The network gave the device no address."
+#define T_WIFI_NO_ADDRESS_DETAIL "  joined; DHCP did not answer"
+#define T_WIFI_NO_ADDRESS_ADVICE \
+  "Check the router hands out addresses, or set one in Booster."
+#define T_WIFI_ROUTER_FAIL "FAIL  The router does not answer."
+#define T_WIFI_ROUTER_FAIL_DETAIL "  router %s"
+#define T_WIFI_ROUTER_FAIL_ADVICE \
+  "Check the router address in Booster, or restart the router."
+#define T_WIFI_DNS_FAIL "FAIL  Names cannot be looked up."
+#define T_WIFI_DNS_FAIL_DETAIL "  %s through DNS %s: %s"
+#define T_WIFI_DNS_FAIL_ADVICE \
+  "Check the router reaches the internet, and the DNS server in Booster."
+#define T_WIFI_WEB_FAIL "FAIL  The internet does not answer."
+#define T_WIFI_WEB_FAIL_DETAIL "  %s at %s: %s"
+#define T_WIFI_WEB_FAIL_ADVICE \
+  "Check the router reaches the internet; a firewall may block the device."
+#define T_WIFI_MEMORY "FAIL  The device ran out of memory."
+#define T_WIFI_MEMORY_DETAIL "  %s"
+#define T_WIFI_MEMORY_ADVICE "Save the report and send it to SidecarTridge."
 
 #define T_EXIT_TITLE "Back to Booster"
 #define T_EXIT_DONE "The device is restarting into Booster."
