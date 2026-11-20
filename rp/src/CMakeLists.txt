@@ -118,6 +118,8 @@ pico_generate_pio_header(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/commemul.pio)
 target_sources(${PROJECT_NAME} PRIVATE
         aconfig.c
         blink.c
+        cardhw.c
+        cardtest.c
         chandler.c
         channel.c
         commemul.c

@@ -1,0 +1,14 @@
+# No card answers: none in the slot, or a dead one.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+card out
+key d
+say "^FAIL  No microSD card answers" 1500
+say "^  none in the slot, or it does not answer" 100
+say "^Push a card fully into the slot" 100
+nosay "^  Writing the test file"
+sdsame

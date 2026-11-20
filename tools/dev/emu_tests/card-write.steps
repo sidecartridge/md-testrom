@@ -1,0 +1,13 @@
+# A write fails halfway: the message, and the half-written file removed.
+@cardfault 3
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key d
+say "^FAIL  Writing the test file failed" 1500
+say "^  card stopped answering, after 128 KB, error 1" 100
+nosay "^WARN  The test file could not be deleted"
+sdsame

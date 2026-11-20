@@ -15,6 +15,7 @@
 #include "channel.h"
 #include "commemul.h"
 #include "build_id.h"
+#include "cardtest.h"
 #include "devtests.h"
 #include "gconfig.h"
 #include "health.h"
@@ -121,6 +122,11 @@ static uint32_t emul_devhooksApp(uint16_t commandId, const uint16_t *payload,
       DPRINTF("The radio chip %s\n",
               devtestsChipFails ? "fails to start" : "starts as it should");
       return 1;
+    case DEVHOOKS_APP_CARD_FAULT:
+      if (payloadSize < 2U || payload[0] > CARDTEST_FAULT_READ) return 0;
+      cardtestFault = payload[0];
+      DPRINTF("The microSD card fault: %u\n", payload[0]);
+      return 1;
     case DEVHOOKS_APP_HEALTH:
       if (payloadSize < 2U || payload[0] == HEALTH_TEST_NONE ||
           payload[0] > HEALTH_TEST_STACK_OVERFLOW) {
@@ -187,6 +193,9 @@ void emul_start() {
     if (drop) chandlerDropEvery = (uint32_t)strtoul(drop, NULL, 10);
     // MDTEST_CHIP_FAIL: the radio chip fails to start (the LED test).
     if (getenv("MDTEST_CHIP_FAIL")) devtestsChipFails = true;
+    // MDTEST_CARD_FAULT="N": the microSD card fails (cardtest.h).
+    const char *card = getenv("MDTEST_CARD_FAULT");
+    if (card) cardtestFault = (uint32_t)strtoul(card, NULL, 10);
   }
 #endif
 

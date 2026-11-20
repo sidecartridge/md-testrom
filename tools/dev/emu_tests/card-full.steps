@@ -1,0 +1,14 @@
+# A full card: nothing written, its message.
+@cardfault 2
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key d
+say "^FAIL  The card is full" 1500
+say "^  0 MB free; the test needs 256 KB" 100
+say "^Free some space on the card" 100
+nosay "^  Writing the test file"
+sdsame

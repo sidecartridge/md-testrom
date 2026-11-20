@@ -14,6 +14,9 @@
 #define INFO_POLL_TICKS 20UL   /* 100 ms */
 #define SELECT_POLL_TICKS 10UL /* 50 ms: the press shows as it happens */
 #define LED_POLL_TICKS 20UL
+#define CARD_POLL_TICKS 20UL
+/* A card slower than this, writing or reading, gets a warning. */
+#define CARD_SLOW_KBS 100L
 /* When a press has lasted this long, the factory reset is near. */
 #define SELECT_WARN_MS 5000U
 /* The coolest and hottest die temperature that is not worth a word. */
@@ -23,11 +26,13 @@
 static char text[CH_RESULT_BYTES];
 static const unsigned short noParams[4] = {0, 0, 0, 0};
 
-/* A value, up to its newline, copied (empty when absent). */
+/* A value, up to its newline, copied (empty when absent); the last
+ * VALUE_SLOTS stay valid, for one line's arguments. */
+#define VALUE_SLOTS 8
 static const char *value(const char *key) {
-  static char out[4][64];
+  static char out[VALUE_SLOTS][64];
   static int next;
-  char *v = out[next++ & 3];
+  char *v = out[next++ & (VALUE_SLOTS - 1)];
   const char *found = chscreen_value(text, key);
   int i = 0;
   if (found) {
@@ -250,6 +255,169 @@ void devscreen_led(void) {
   console_line(T_LED_FAIL_DETAIL, on ? T_YES : T_NO, off ? T_YES : T_NO,
                blinking ? T_YES : T_NO);
   console_line(T_LED_FAIL_ADVICE);
+}
+
+/* The card test's live view: each phase as it begins. */
+static unsigned short cardPhase;
+
+static int cardWatch(const CmdAnswer *a) {
+  unsigned short phase = a->data[MDTEST_JOB_ANS_LIVE];
+  if (phase == cardPhase) return 0;
+  if (phase == MDTEST_SD_PHASE_WRITE) console_line(T_CARD_WRITING, MDTEST_SD_FILE);
+  if (phase == MDTEST_SD_PHASE_READ) console_line(T_CARD_READING);
+  cardPhase = phase;
+  return 0;
+}
+
+static void cardFailure(void) {
+  console_blank();
+  if (chscreen_valueIs(text, "card", "no answer")) {
+    console_line(T_CARD_NONE);
+    console_line(T_CARD_NONE_DETAIL);
+    console_line(T_CARD_NONE_ADVICE);
+  } else if (chscreen_valueIs(text, "card", "standard capacity")) {
+    console_line(T_CARD_OLD);
+    console_line(T_CARD_OLD_DETAIL);
+    console_line(T_CARD_OLD_ADVICE);
+  } else if (chscreen_valueIs(text, "card", "failed")) {
+    console_line(T_CARD_START);
+    console_line(T_CARD_START_ADVICE);
+  } else if (chscreen_valueIs(text, "filesystem", "none")) {
+    console_line(T_CARD_NO_FS);
+    console_line(T_CARD_FS_DETAIL, value("mount_error"));
+    console_line(T_CARD_NO_FS_ADVICE);
+  } else if (chscreen_valueIs(text, "filesystem", "unreadable")) {
+    console_line(T_CARD_BAD_FS);
+    console_line(T_CARD_FS_DETAIL, value("mount_error"));
+    console_line(T_CARD_BAD_FS_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "card full")) {
+    console_line(T_CARD_FULL);
+    console_line(T_CARD_FULL_DETAIL, value("free_mb"),
+                 (unsigned)MDTEST_SD_FILE_KB);
+    console_line(T_CARD_FULL_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "write protected")) {
+    console_line(T_CARD_LOCKED);
+    console_line(T_CARD_LOCKED_DETAIL);
+    console_line(T_CARD_LOCKED_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "data differs")) {
+    console_line(T_CARD_DIFFERS);
+    console_line(T_CARD_DIFFERS_DETAIL, value("mismatch_at"),
+                 value("mismatch_read"), value("mismatch_expected"));
+    console_line(T_CARD_DIFFERS_ADVICE);
+  } else {
+    console_line(T_CARD_WRITE);
+    console_line(T_CARD_WRITE_DETAIL, value("error"),
+                 has("written_kb") ? value("written_kb") : "0",
+                 has("fs_error") ? value("fs_error") : "-");
+    console_line(T_CARD_WRITE_ADVICE);
+  }
+}
+
+void devscreen_card(void) {
+  console_blank();
+  console_line(T_CARD_TITLE);
+  console_line(T_CARD_ASK);
+  cardPhase = MDTEST_SD_PHASE_START;
+  int state = chscreen_run(MDTEST_TEST_SD_CARD, noParams, CARD_POLL_TICKS,
+                           cardWatch, text);
+  if (state < 0) return;
+  if (chscreen_valueIs(text, "card", "ok")) {
+    console_line(T_CARD_TYPE, value("card_type"), value("card_mb"),
+                 value("spi_khz"));
+    console_line(T_CARD_MAKER, value("maker"), value("oem"), value("product"),
+                 value("revision"), value("made"));
+    console_line(T_CARD_SERIAL, value("serial"), value("start_ms"));
+  }
+  if (has("size_mb")) {
+    console_line(T_CARD_FORMAT, value("filesystem"), value("size_mb"),
+                 value("free_mb"));
+    if (has("label") && value("label")[0]) {
+      console_line(T_CARD_LABEL, value("label"));
+    }
+    if (has("apps_folder")) {
+      console_line(chscreen_valueIs(text, "apps_folder", "found")
+                       ? T_CARD_APPS_FOUND
+                       : T_CARD_APPS_MISSING);
+    }
+  }
+  if (has("read_kbs")) {
+    console_line(T_CARD_SPEED, value("write_kbs"), value("read_kbs"));
+  }
+  if (state == MDTEST_JOB_DONE) {
+    console_blank();
+    console_line(T_CARD_PASS);
+    if (atol(value("write_kbs")) < CARD_SLOW_KBS ||
+        atol(value("read_kbs")) < CARD_SLOW_KBS) {
+      console_line(T_CARD_SLOW);
+      console_line(T_CARD_SLOW_DETAIL, (unsigned)CARD_SLOW_KBS);
+      console_line(T_CARD_SLOW_ADVICE);
+    }
+  } else if (state == MDTEST_JOB_FAILED) {
+    cardFailure();
+  } else {
+    console_line(T_JOB_FAILED, MDTEST_TEST_SD_CARD);
+  }
+  if (has("file_left")) {
+    console_line(T_CARD_LEFT);
+    console_line(T_CARD_LEFT_DETAIL, value("file_left"));
+  }
+}
+
+/* The swap test's live view: what to do now, as each phase begins. */
+static unsigned short swapPhase;
+static int swapCardAtStart;
+
+static int swapWatch(const CmdAnswer *a) {
+  unsigned short phase = a->data[MDTEST_JOB_ANS_LIVE];
+  if (phase == swapPhase) return 0;
+  if (phase == MDTEST_SD_SWAP_OUT) {
+    swapCardAtStart = 1;
+    console_line(T_SWAP_OUT, (unsigned)MDTEST_SD_SWAP_SECONDS);
+  } else if (phase == MDTEST_SD_SWAP_IN) {
+    if (swapCardAtStart) {
+      console_line(T_SWAP_IS_OUT);
+      console_line(T_SWAP_IN, (unsigned)MDTEST_SD_SWAP_SECONDS);
+    } else {
+      console_line(T_SWAP_EMPTY);
+      console_line(T_SWAP_IN_FIRST, (unsigned)MDTEST_SD_SWAP_SECONDS);
+    }
+  } else if (phase == MDTEST_SD_SWAP_MOUNT) {
+    console_line(T_SWAP_BACK);
+  }
+  swapPhase = phase;
+  return 0;
+}
+
+void devscreen_cardSwap(void) {
+  console_blank();
+  console_line(T_SWAP_TITLE);
+  console_line(T_SWAP_LOOKING);
+  swapPhase = MDTEST_SD_SWAP_FIRST;
+  swapCardAtStart = 0;
+  int state = chscreen_run(MDTEST_TEST_SD_SWAP, noParams, CARD_POLL_TICKS,
+                           swapWatch, text);
+  if (state < 0) return;
+  /* The job can end before a poll shows the card back. */
+  if (state == MDTEST_JOB_DONE && swapPhase != MDTEST_SD_SWAP_MOUNT) {
+    console_line(T_SWAP_BACK);
+  }
+  console_blank();
+  if (state == MDTEST_JOB_DONE) {
+    console_line(T_SWAP_PASS);
+  } else if (chscreen_valueIs(text, "error", "card not taken out")) {
+    console_line(T_SWAP_NOT_OUT);
+    console_line(T_SWAP_WAITED, (unsigned)MDTEST_SD_SWAP_SECONDS);
+    console_line(T_SWAP_NOT_OUT_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "card not put back")) {
+    console_line(T_SWAP_NOT_IN);
+    console_line(T_SWAP_WAITED, (unsigned)MDTEST_SD_SWAP_SECONDS);
+    console_line(T_SWAP_NOT_IN_ADVICE);
+  } else if (chscreen_valueIs(text, "error", "card back but not usable")) {
+    console_line(T_SWAP_UNUSABLE);
+    console_line(T_SWAP_UNUSABLE_ADVICE);
+  } else {
+    console_line(T_JOB_FAILED, MDTEST_TEST_SD_SWAP);
+  }
 }
 
 int devscreen_exit(long mch) {

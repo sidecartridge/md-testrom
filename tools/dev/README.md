@@ -39,7 +39,7 @@ What differs here:
   `text`, `key`, `type` and `st-reset` say they do not apply and exit 1.
 - **The command channel runs once the program selects ROM3.** `swd.py counters` and `ring` show
   what the capture and the parser made of the ST's ROM3 reads; `inject` and `app` (`heap_hold`,
-  `health`, and this app's `fault`, `drop`, `select`, `restart`, `chip_fail`) work on debug builds, and
+  `health`, and this app's `fault`, `drop`, `select`, `restart`, `chip_fail`, `card_fault`) work on debug builds, and
   injected commands answer only while ROM3 is selected (`app select 1`). `app restart` is an RP
   restart as the ST sees it (ROM3 test data again, the job gone, a new boot ID) with no reset:
   `swd.py reset` while a program reads the cartridge crashes the ST, as a flash does. `swd.py log` shows the program's screen
@@ -105,7 +105,7 @@ window and the main loop running, and keeps the log and a screenshot of the last
 (`@hatari bare`), on the ST (TOS 1.04, 512 KB), STE, Mega STE, TT and Falcon setups. The program
 prints every line it shows through NatFeats (`MDTEST: <line>` in `hatari.out`); the steps in
 `tools/dev/emu_tests/*.steps` press keys, wait for lines, and check the files it saves on the
-floppy once Hatari has stopped. `--all` runs every test on every setup. `@fault KIND A B` in a
+floppy once Hatari has stopped. `--all` runs every test on every setup, and `--all --jobs 6` six runs at once, each its own Hatari (the whole set in minutes instead of hours; `--test` and `--setup` narrow it). A change runs its own tests on every setup and the rest on the ST (`--all --jobs 6 --setup st-104`); the whole set on every setup before a release. `@fault KIND A B` in a
 test serves the window as that faulty bus would (`MDTEST_FAULT`), to check the line test names it.
 `@debug` builds the program's debug variant (EmuMD's ROM3 cannot pass the line test, so the
 command channel's tests override the gate), `@drop N` loses every Nth answer (`MDTEST_DROP`),
@@ -113,7 +113,11 @@ command channel's tests override the gate), `@drop N` loses every Nth answer (`M
 TEXT on the floppy, `@twice` puts the program in the AUTO folder twice (quitting the first starts
 it again), `@chipfail` makes the radio chip fail to start (the LED test's third verdict), the step
 `request CODE ...` hands the program a bench request (`request 255`: the firmware restarts as the
-ST sees it, `app restart`), and `select MS` holds SELECT down for MS ms.
+ST sees it, `app restart`), and `select MS` holds SELECT down for MS ms. `@cardfault N` makes
+the microSD card fail (`MDTEST_CARD_FAULT`: 1 no answer, 2 full, 3 a write fails, 4 a byte read
+back differs), `@sdapps` puts Booster's apps folder on it, `card out` and `card in` take it out and
+put it back, and `sdsame` checks at the end that the card's folder (a `USER.TXT` of the user's,
+always) holds what it held before the run.
 
 The command channel, with no ST: `job.py run dummy 2 --expect seconds=2` selects ROM3 through
 the debug hook, runs a job by injected commands, reads its result from the window and gives ROM3
@@ -122,7 +126,10 @@ bench mode (`MDTEST.BNC` holding `requests`): `st_loop.py run dummy 2 --expect s
 10`, or the same with `--emu st-104` under EmuMD.
 
 The device tests run the same way: `job.py run device_info`, `job.py run select 10` (press
-SELECT within 10 s), `job.py run led 1` (on; 0 off, 2 blink, 3 off and the chip powered down).
+SELECT within 10 s), `job.py run led 1` (on; 0 off, 2 blink, 3 off and the chip powered down),
+`job.py run sd_card` (the card described, its file written, read back and deleted), `job.py run
+sd_swap 30` (take the card out and put it back within 30 s each); `swd.py app card_fault N` makes
+the card fail as `@cardfault N` does.
 
 On the device, `swd.py verdict` reads the last line-test verdict the ST sent, and
 `bus_faults.py` serves each fault in turn (`swd.py app fault`) while `MDTEST.TOS` runs in bench

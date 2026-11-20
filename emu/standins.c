@@ -71,6 +71,40 @@ void select_poll(void) {
   fprintf(stderr, "emu: SELECT pressed for %u ms\n", ms);
 }
 
+/* The microSD card under the card tests (cardhw.h). EmuMD stands in for the
+ * card at FatFs's level, its [run] sd folder, always mounted: the card's own
+ * start is this stand-in, a card that is in unless the file EMU_CARD_OUT_FILE
+ * names exists (the bench takes it out by creating that file). The same
+ * pretend 32 GB card EmuMD's f_getfree() describes. */
+#include "cardhw.h"
+
+#define EMU_CARD_SECTORS (64u * 1024u * 1024u)
+#define EMU_CARD_SPI_KHZ 12500u
+
+static bool emuCardIn(void) {
+  const char *path = getenv("EMU_CARD_OUT_FILE");
+  return !path || access(path, F_OK) != 0;
+}
+
+int cardhw_start(CardHwInfo *info) {
+  /* Maker 03, OEM "SD", product "EMUMD", revision 1.0, a serial, made
+   * November 2026. */
+  static const uint8_t cid[CARDHW_CID_BYTES] = {
+      0x03, 'S', 'D', 'E', 'M', 'U', 'M', 'D', 0x10,
+      0x4D, 0x44, 0x45, 0x4D, 0x01, 0xAB, 0x00};
+  memset(info, 0, sizeof(*info));
+  info->spiKhz = EMU_CARD_SPI_KHZ;
+  if (!emuCardIn()) return CARDHW_NO_ANSWER;
+  info->type = CARDHW_TYPE_SDHC;
+  info->sectors = EMU_CARD_SECTORS;
+  memcpy(info->cid, cid, sizeof(cid));
+  return CARDHW_OK;
+}
+
+bool cardhw_present(void) { return emuCardIn(); }
+
+void cardhw_stop(void) {}
+
 /* health.c records why the RP restarted from the RP2040's watchdog, fault
  * handlers and SCB, none of which EmuMD has: a restart there is a new run. */
 #include "health.h"

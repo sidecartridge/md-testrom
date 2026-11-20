@@ -41,7 +41,7 @@
 f_utime(). /  (0:Disable or 1:Enable) Also FF_FS_READONLY needs to be 0 to
 enable this option. */
 
-#define FF_USE_LABEL 0
+#define FF_USE_LABEL 1
 /* This option switches volume label functions, f_getlabel() and f_setlabel().
 /  (0:Disable or 1:Enable) */
 
@@ -223,10 +223,10 @@ data transfer. */
 /  To enable exFAT, also LFN needs to be enabled. (FF_USE_LFN >= 1)
 /  Note that enabling exFAT discards ANSI C (C89) compatibility. */
 
-#define FF_FS_NORTC 0
-#define FF_NORTC_MON 1
+#define FF_FS_NORTC 1  // the card test's file is deleted at once
+#define FF_NORTC_MON 11
 #define FF_NORTC_MDAY 1
-#define FF_NORTC_YEAR 2022
+#define FF_NORTC_YEAR 2026
 /* The option FF_FS_NORTC switches timestamp feature. If the system does not
 have /  an RTC or valid timestamp is not needed, set FF_FS_NORTC = 1 to disable
 the /  timestamp feature. Every object modified by FatFs will have a fixed

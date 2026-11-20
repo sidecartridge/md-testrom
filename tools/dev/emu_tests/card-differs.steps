@@ -1,0 +1,12 @@
+# A byte read back differs from the one written: where, and the file removed.
+@cardfault 4
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key d
+say "^FAIL  The card gave back other data than written" 1500
+say "^  at byte 131073: read [0-9A-F]{2}, written [0-9A-F]{2}" 100
+sdsame
