@@ -17,5 +17,5 @@ key s
 say "^Keep the Wi-Fi and Bluetooth names heard in the report" 100
 key y
 say "^  names kept" 100
-say "^Report saved as REPORT00.TXT" 500
-floppy REPORT00.TXT "^  Booster's network EmuMD, -75 dBm \(very weak\)\r$"
+say "^Report saved on the microSD card as MDTEST-REPORT-00.TXT" 1500
+sdfile MDTEST-REPORT-00.TXT "^  Booster's network EmuMD, -75 dBm \(very weak\)\r$"

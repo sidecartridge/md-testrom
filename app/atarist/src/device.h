@@ -20,6 +20,7 @@ typedef struct {
   DeviceKind kind;
   unsigned short layout;
   unsigned short state;
+  unsigned short bench; /* MDTEST_BENCH_*: the bench mode asked for */
   char version[MDTEST_HDR_VERSION_WORDS * 2 + 1];
   char build[MDTEST_HDR_BUILD_WORDS * 2 + 1];
 } Device;

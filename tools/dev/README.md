@@ -109,9 +109,10 @@ floppy once Hatari has stopped. `--all` runs every test on every setup, and `--a
 test serves the window as that faulty bus would (`MDTEST_FAULT`), to check the line test names it.
 `@debug` builds the program's debug variant (EmuMD's ROM3 cannot pass the line test, so the
 command channel's tests override the gate), `@drop N` loses every Nth answer (`MDTEST_DROP`),
-`@protocol N` builds a program that speaks protocol N, `@bench TEXT` puts an `MDTEST.BNC` holding
-TEXT on the floppy, `@twice` puts the program in the AUTO folder twice (quitting the first starts
-it again), `@chipfail` makes the radio chip fail to start (the LED test's third verdict), the step
+`@protocol N` builds a program that speaks protocol N, `@bench MODE` has the firmware ask the
+program for bench mode in the window's header (`MDTEST_BENCH`: `line`, `requests` or `commands`),
+`@twice` puts the program in the AUTO folder twice (quitting restarts the computer, so the first
+runs again), `@chipfail` makes the radio chip fail to start (the LED test's third verdict), the step
 `request CODE ...` hands the program a bench request (`request 255`: the firmware restarts as the
 ST sees it, `app restart`), and `select MS` holds SELECT down for MS ms. `@cardfault N` makes
 the microSD card fail (`MDTEST_CARD_FAULT`: 1 no answer, 2 full, 3 a write fails, 4 a byte read
@@ -120,12 +121,14 @@ put it back, and `sdsame` checks at the end that the card's folder (a `USER.TXT`
 always) holds what it held before the run. `@wifi HOW` makes EmuMD's Wi-Fi fail (`badauth`,
 `nonet`, `fail`, `off`), `@rssi DBM` sets its signal, `@btfail` and `@btnone` make the Bluetooth stand-in's controller
 fail or its scan hear nothing, and `floppynot NAME REGEX` checks a saved
-file does not hold something (a network's name in a report).
+file does not hold something. A report the program saves is on the card: `sdfile NAME REGEX`,
+`sdfilenot NAME REGEX` and `sdnofile NAME` check the run's card folder (`MDTEST-REPORT-00.TXT`).
 
 The command channel, with no ST: `job.py run dummy 2 --expect seconds=2` selects ROM3 through
 the debug hook, runs a job by injected commands, reads its result from the window and gives ROM3
 back (`tools_harness.py --channel` adds hello, echo and the window afterwards). With the ST in
-bench mode (`MDTEST.BNC` holding `requests`): `st_loop.py run dummy 2 --expect seconds=2 --times
+bench mode (`swd.py app bench 2` on a debug firmware, then start the program: the line test, then
+the RP's requests): `st_loop.py run dummy 2 --expect seconds=2 --times
 10`, or the same with `--emu st-104` under EmuMD.
 
 The device tests run the same way: `job.py run device_info`, `job.py run select 10` (press
@@ -140,7 +143,9 @@ chip too.
 
 On the device, `swd.py verdict` reads the last line-test verdict the ST sent, and
 `bus_faults.py` serves each fault in turn (`swd.py app fault`) while `MDTEST.TOS` runs in bench
-mode (an `MDTEST.BNC` file next to it), and compares the verdict's class with the one expected.
+mode (`swd.py app bench 1` before starting it: the line test in a loop), and compares the verdict's
+class with the one expected. The program never returns to the desktop: a key ends the bench loop
+and restarts the computer.
 Flash only with the ST at the desktop, never during the bench loop.
 
 The sections below are md-rom-emulator's, kept for each tool's options. Where they mention a

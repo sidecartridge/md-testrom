@@ -2,8 +2,9 @@
 """Check on the device that the line test names each fault a debug firmware
 can serve.
 
-MDTEST.TOS runs in bench mode on the ST (an MDTEST.BNC file next to it): the
-line test in a loop, each verdict sent to the RP as a frame of ROM3 reads.
+MDTEST.TOS runs in bench mode on the ST (swd.py app bench 1 before it
+starts): the line test in a loop, each verdict sent to the RP as a frame of
+ROM3 reads.
 For each fault this tool asks the firmware to serve the window as that
 faulty bus would (`swd.py app fault`), waits for the next two verdicts (the
 first may have started before the fault), compares the class with the one

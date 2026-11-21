@@ -1,11 +1,19 @@
 #include "console.h"
 
-#include <mint/osbind.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "hw.h"
+
 #define LINE_CHARS 160
+/* The screen: a title line, a device line, the body, a bottom line. */
+#define TITLE_ROW 0
+#define DEVICE_ROW 1
+#define BODY_TOP 3
+#define BODY_BOTTOM 23
+#define STATUS_ROW 24
+#define SCREEN_WIDTH 81 /* console_wrap() keeps one column free */
 #define REPORT_LINES 200
 
 static char report[REPORT_LINES][LINE_CHARS];
@@ -13,7 +21,10 @@ static unsigned char privateStart[REPORT_LINES];
 static unsigned char privateLength[REPORT_LINES];
 static int reportCount;
 static long nfStderr;
-static int columns;
+static char machineText[HW_COLUMNS];
+static void record(const char *text);
+static int bodyTop = BODY_TOP;
+static int cursor = BODY_TOP; /* the body's next row */
 
 /*
  * NatFeats (Hatari's host calls). The opcodes $7300 and $7301 are illegal
@@ -22,9 +33,6 @@ static int columns;
  */
 long nf_detect(const char *name) __asm__("mdt_nfdetect");
 long nf_call(long id, const char *text) __asm__("mdt_nfcall");
-/* Line-A's variables (the text screen's size among them), on every TOS. */
-char *linea_base(void) __asm__("mdt_lineabase");
-#define LINEA_V_CEL_MX (-44) /* last text column */
 
 __asm__(
     "    .text\n"
@@ -45,27 +53,129 @@ __asm__(
     "    move.l  %a3,0x10.w\n"
     "    movem.l (%sp)+,%a2-%a3\n"
     "    rts\n"
-    "    .globl mdt_lineabase\n"
-    "mdt_lineabase:\n"
-    "    move.l  %a2,-(%sp)\n"
-    "    .dc.w   0xa000\n"            /* Line-A init: variables in a0 */
-    "    move.l  %a0,%d0\n"
-    "    move.l  (%sp)+,%a2\n"
-    "    rts\n"
     "    .globl mdt_nfcall\n"
     "mdt_nfcall:\n"
     "    .dc.w   0x7301\n"         /* NATFEAT_CALL */
     "    rts\n");
 
-void console_init(void) {
-  nfStderr = nf_detect("NF_STDERR");
-  columns = *(short *)(linea_base() + LINEA_V_CEL_MX) + 1;
-  if (columns < 40 || columns > 255) columns = Getrez() == 0 ? 40 : 80;
-  /* Cursor off; lines are wrapped here, never by the screen. */
-  Cconws("\033w\033f");
+/* --- The screen ----------------------------------------------------------- */
+
+/* A word on its own: not part of a longer one. */
+static int wordAt(const char *line, int at, const char *word) {
+  int n = (int)strlen(word);
+  if (strncmp(line + at, word, (size_t)n) != 0) return 0;
+  if (at > 0 && line[at - 1] != ' ') return 0;
+  char after = line[at + n];
+  return after == '\0' || after == ' ' || after == '.' || after == ':' ||
+         after == ',';
 }
 
-void console_clear(void) { Cconws("\033E"); }
+/* A row of text, the verdict words in their colours: PASS green, FAIL white
+ * on red, WARN black on white. The rest of the row cleared. */
+static void drawText(int col, int row, const char *text, int fg, int bg) {
+  int n = (int)strlen(text);
+  for (int i = 0; i < n && col + i < HW_COLUMNS;) {
+    int len = 0, wfg = fg, wbg = bg;
+    if (bg == HW_BLACK) {
+      if (wordAt(text, i, "PASS")) {
+        len = 4, wfg = HW_GREEN;
+      } else if (wordAt(text, i, "FAIL")) {
+        len = 4, wfg = HW_WHITE, wbg = HW_RED;
+      } else if (wordAt(text, i, "WARN")) {
+        len = 4, wfg = HW_BLACK, wbg = HW_WHITE;
+      }
+    }
+    if (len == 0) len = 1, wfg = fg, wbg = bg;
+    for (int k = 0; k < len && col + i + k < HW_COLUMNS; k++) {
+      hw_putChar(col + i + k, row, text[i + k], wfg, wbg);
+    }
+    i += len;
+  }
+}
+
+static void drawRow(int row, const char *text, int fg, int bg) {
+  drawText(0, row, text, fg, bg);
+  for (int c = (int)strlen(text); c < HW_COLUMNS; c++) {
+    hw_putChar(c, row, ' ', fg, bg);
+  }
+}
+
+/* A bar: reversed, a text on the left and one on the right. */
+static void drawBar(int row, const char *left, const char *right) {
+  char line[HW_COLUMNS + 1];
+  memset(line, ' ', HW_COLUMNS);
+  line[HW_COLUMNS] = '\0';
+  int n = (int)strlen(left);
+  if (n > HW_COLUMNS - 2) n = HW_COLUMNS - 2;
+  memcpy(line + 1, left, (size_t)n);
+  if (right && *right) {
+    int r = (int)strlen(right);
+    if (r > HW_COLUMNS - 2 - n - 2) r = HW_COLUMNS - 2 - n - 2;
+    if (r > 0) memcpy(line + HW_COLUMNS - 1 - r, right, (size_t)r);
+  }
+  drawRow(row, line, HW_BLACK, HW_WHITE);
+}
+
+static void putScreen(const char *line, void *ctx) {
+  (void)ctx;
+  if (cursor > BODY_BOTTOM) {
+    hw_scrollUp(bodyTop, BODY_BOTTOM);
+    cursor = BODY_BOTTOM;
+  }
+  drawRow(cursor++, line, HW_WHITE, HW_BLACK);
+}
+
+void console_init(void) {
+  nfStderr = nf_detect("NF_STDERR");
+  hw_clearRows(0, HW_ROWS - 1, HW_BLACK);
+  bodyTop = cursor = BODY_TOP;
+}
+
+void console_clear(void) {
+  bodyTop = cursor = BODY_TOP;
+  hw_clearRows(bodyTop, BODY_BOTTOM, HW_BLACK);
+}
+
+void console_title(const char *left, const char *right) {
+  drawBar(TITLE_ROW, left, right ? right : machineText);
+}
+
+void console_setMachine(const char *text) {
+  snprintf(machineText, sizeof(machineText), "%s", text);
+}
+
+void console_screen(const char *title, const char *right) {
+  console_clear();
+  console_title(title, right);
+}
+
+void console_page(const char *title) {
+  console_screen(title, 0);
+  record("");
+  record(title);
+}
+
+void console_device(const char *text) {
+  char line[HW_COLUMNS + 1];
+  snprintf(line, sizeof(line), " %s", text);
+  drawRow(DEVICE_ROW, line, HW_WHITE, HW_BLACK);
+}
+
+void console_status(const char *left, const char *right) {
+  drawBar(STATUS_ROW, left, right);
+}
+
+void console_bodyFrom(int row) {
+  if (row < BODY_TOP) row = BODY_TOP;
+  if (row > BODY_BOTTOM) row = BODY_BOTTOM;
+  bodyTop = cursor = row;
+}
+
+int console_bodyRow(void) { return cursor; }
+
+void console_at(int col, int row, const char *text) {
+  drawText(col, row, text, HW_WHITE, HW_BLACK);
+}
 
 /* Where a wrapped line continues: under a verdict's text, or under the
  * line's own indentation. */
@@ -109,20 +219,14 @@ void console_wrap(const char *text, int width,
   }
 }
 
-static void putScreen(const char *line, void *ctx) {
-  (void)ctx;
-  Cconws(line);
-  Cconws("\r\n");
-}
-
 static void (*mirrorLine)(const char *line);
 
 void console_setMirror(void (*mirror)(const char *line)) {
   mirrorLine = mirror;
 }
 
-static void emit(const char *text) {
-  console_wrap(text, columns, putScreen, 0);
+/* A line for the report, the host's log and the RP's mirror. */
+static void record(const char *text) {
   if (reportCount < REPORT_LINES) {
     strncpy(report[reportCount], text, LINE_CHARS - 1);
     report[reportCount][LINE_CHARS - 1] = '\0';
@@ -134,6 +238,20 @@ static void emit(const char *text) {
     nf_call(nfStderr, "\n");
   }
   if (mirrorLine) mirrorLine(text);
+}
+
+static void emit(const char *text) {
+  console_wrap(text, SCREEN_WIDTH, putScreen, 0);
+  record(text);
+}
+
+void console_record(const char *fmt, ...) {
+  char text[LINE_CHARS];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(text, sizeof(text), fmt, args);
+  va_end(args);
+  record(text);
 }
 
 void console_line(const char *fmt, ...) {
@@ -162,22 +280,16 @@ void console_privateLine(const char *name, const char *fmt, ...) {
 
 void console_blank(void) { emit(""); }
 
-/* Keys through GEMDOS, not the BIOS: GEMDOS's screen output looks for
- * Ctrl-S and Ctrl-C and moves a key typed meanwhile into its own type-ahead,
- * where the BIOS calls never see it (a key pressed while a job printed its
- * progress was lost). */
+/* Keys from the program's own keyboard handler (hw.c): every key typed is
+ * kept, whatever the program was doing. */
 int console_key(void) {
-  long key = Crawcin();
-  int ch = (int)(key & 0xFF);
-  if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
+  int ch;
+  while ((ch = hw_key()) == 0) {
+  }
   return ch;
 }
 
-int console_keyPressed(void) {
-  if (!Cconis()) return 0;
-  (void)Crawcin();
-  return 1;
-}
+int console_keyPressed(void) { return hw_key() != 0; }
 
 int console_reportLines(void) { return reportCount; }
 

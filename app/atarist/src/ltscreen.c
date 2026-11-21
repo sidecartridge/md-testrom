@@ -1,14 +1,15 @@
 #include "ltscreen.h"
 
-#include <mint/osbind.h>
+#include <stdio.h>
 
 #include "console.h"
 #include "diagnose.h"
+#include "hw.h"
 #include "mdtest.h"
 #include "texts.h"
 
 #define WINDOW ((const volatile uint16_t *)MDTEST_ROM4_ADDRESS)
-#define HZ_200 (*(volatile unsigned long *)0x4BA)
+#define HZ_200 hw_ticks
 /* Microseconds a read takes on an 8 MHz 68000, the pattern computed with
  * it: measured in Hatari's cycle-exact ST. */
 #define US_PER_READ 60UL
@@ -19,6 +20,10 @@ static const char *const testNames[LT_TESTS] = {
     T_TEST_FAR_ADDRESSES, T_TEST_AFTER_RAM,    T_TEST_IRQ_OFF};
 
 static const char *const bankNames[2] = {T_BANK_ROM4, T_BANK_ROM3};
+/* The table: a row per test, a column per bank. */
+static const int cellColumn[2] = {21, 42};
+#define NAME_COLUMN 2
+#define CELL_WIDTH 20
 static const int selectGpio[2] = {22, 26};
 
 static DgStats stats;
@@ -121,36 +126,66 @@ static int sameFinding(const DgFinding *x, const DgFinding *y) {
   return x->kind == y->kind && x->a == y->a && x->b == y->b;
 }
 
+/* A cell of the table, padded so it clears what it replaces. */
+static void cell(int row, int bank, const char *text) {
+  char padded[CELL_WIDTH + 1];
+  snprintf(padded, sizeof(padded), "%-*s", CELL_WIDTH, text);
+  console_at(cellColumn[bank], row, padded);
+}
+
 LtVerdict ltscreen_run(const LtSizes *sizes, unsigned long estimateSeconds) {
   int stopped = 0;
+  char text[CELL_WIDTH + 1];
   dg_reset(&stats);
   runNumber++;
-  console_blank();
-  console_line(T_LINE_TITLE);
+  console_page(T_LINE_TITLE);
   if (estimateSeconds < 120) {
     console_line(T_LINE_QUICK, estimateSeconds);
   } else {
     console_line(T_LINE_LONG, estimateSeconds / 60);
   }
+  console_status(T_LINE_STATUS, 0);
+
+  /* The table, drawn once; each test's cell filled as it ends. Every row is
+   * also recorded as a line, as the report and the host's log have it. */
+  int top = console_bodyRow() + 1;
+  console_at(NAME_COLUMN, top, T_LINE_HEAD_TEST);
+  for (int bank = 0; bank < 2; bank++) {
+    console_at(cellColumn[bank], top, bankNames[bank]);
+  }
+  for (int t = 0; t < LT_TESTS; t++) {
+    console_at(NAME_COLUMN, top + 1 + t, testNames[t]);
+  }
+  console_bodyFrom(top + 2 + LT_TESTS);
 
   for (int t = 0; t < LT_TESTS && !stopped; t++) {
+    int row = top + 1 + t;
     for (int bank = 0; bank < 2 && !stopped; bank++) {
+      cell(row, bank, T_LINE_CELL_RUNNING);
       uint32_t before = stats.bank[bank].errors;
       unsigned long start = HZ_200;
       stopped = lt_run((LtTest)t, bank, WINDOW, sizes, &stats, keyPressed);
       unsigned long ticks = HZ_200 - start;
       uint32_t errors = stats.bank[bank].errors - before;
       if (stopped) {
-        console_line(T_LINE_ROW_STOPPED, testNames[t], bankNames[bank]);
+        console_record(T_LINE_ROW_STOPPED, testNames[t], bankNames[bank]);
+        cell(row, bank, T_OUT_STOPPED);
       } else if (errors) {
-        console_line(T_LINE_ROW_ERRORS, testNames[t], bankNames[bank],
-                     (unsigned long)errors);
+        console_record(T_LINE_ROW_ERRORS, testNames[t], bankNames[bank],
+                       (unsigned long)errors);
+        snprintf(text, sizeof(text), T_LINE_CELL_ERRORS,
+                 (unsigned long)errors);
+        cell(row, bank, text);
       } else if (t == LT_IRQ_OFF) {
         /* The 200 Hz timer stops with the interrupts. */
-        console_line(T_LINE_ROW_NOTIME, testNames[t], bankNames[bank]);
+        console_record(T_LINE_ROW_NOTIME, testNames[t], bankNames[bank]);
+        cell(row, bank, T_OUT_PASS);
       } else {
-        console_line(T_LINE_ROW, testNames[t], bankNames[bank], "PASS",
-                     ticks / 200, (ticks % 200) / 20);
+        console_record(T_LINE_ROW, testNames[t], bankNames[bank], "PASS",
+                       ticks / 200, (ticks % 200) / 20);
+        snprintf(text, sizeof(text), T_LINE_CELL_PASS, ticks / 200,
+                 (ticks % 200) / 20);
+        cell(row, bank, text);
       }
     }
   }

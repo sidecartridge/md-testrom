@@ -11,6 +11,8 @@
 
 #include "emul.h"
 
+#include <string.h>
+
 #include "chandler.h"
 #include "channel.h"
 #include "commemul.h"
@@ -134,6 +136,11 @@ static uint32_t emul_devhooksApp(uint16_t commandId, const uint16_t *payload,
       DPRINTF("Wi-Fi %s\n", wifitestNotSetUp ? "read as not set up"
                                               : "as Booster has it");
       return 1;
+    case DEVHOOKS_APP_BENCH:
+      if (payloadSize < 2U || payload[0] > MDTEST_BENCH_COMMANDS) return 0;
+      mdtest_setBench(window, payload[0]);
+      DPRINTF("Bench mode %u for the program\n", payload[0]);
+      return 1;
     case DEVHOOKS_APP_HEALTH:
       if (payloadSize < 2U || payload[0] == HEALTH_TEST_NONE ||
           payload[0] > HEALTH_TEST_STACK_OVERFLOW) {
@@ -193,6 +200,14 @@ void emul_start() {
     unsigned int kind = 0, a = 0, b = 0;
     if (fault && sscanf(fault, "%u %u %u", &kind, &a, &b) >= 1) {
       serveFault(kind, a, b);
+    }
+    // MDTEST_BENCH="line|requests|commands": the program's bench mode.
+    const char *bench = getenv("MDTEST_BENCH");
+    if (bench) {
+      uint16_t mode = !strcmp(bench, "requests")   ? MDTEST_BENCH_REQUESTS
+                      : !strcmp(bench, "commands") ? MDTEST_BENCH_COMMANDS
+                                                   : MDTEST_BENCH_LINE;
+      mdtest_setBench(window, mode);
     }
     // MDTEST_DROP="N": every Nth command runs unanswered.
     extern uint32_t chandlerDropEvery;

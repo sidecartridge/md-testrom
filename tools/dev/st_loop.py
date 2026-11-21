@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Have MDTEST.TOS in bench mode run a test, with nobody at the ST.
 
-The program, started with an MDTEST.BNC holding "requests" next to it, runs
-the line test, selects ROM3 and then polls the RP for requests. This tool
+The program, started in bench mode "requests" (swd.py app bench 2 on a debug
+firmware; @bench under EmuMD), runs the line test, selects ROM3 and then
+polls the RP for requests. This tool
 posts one (run TEST with its parameters), waits for the program's result
 lines in the screen it mirrors to the RP, and compares them with --expect.
 

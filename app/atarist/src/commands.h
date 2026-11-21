@@ -57,6 +57,10 @@ void cmd_resultText(char *text, unsigned short length);
 /* A line of the screen to the RP; dropped (and counted) unanswered. */
 void cmd_log(const char *line);
 
+/* A chunk of the report for the card (MDTEST_CMD_REPORT_DATA; length 0
+ * ends it): CMD_OK and the answer, whose status may be BUSY (send again). */
+int cmd_reportData(const char *bytes, unsigned short length, CmdAnswer *a);
+
 /* The bench's next request (MDTEST_CMD_REQUEST): CMD_OK and the answer. */
 int cmd_request(CmdAnswer *a);
 

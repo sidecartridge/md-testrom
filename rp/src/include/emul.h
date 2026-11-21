@@ -54,6 +54,10 @@
 // wifi_not_set_up 1: the Wi-Fi test reads Booster's Wi-Fi as not set up to
 // join a network (a warning, after the scan); wifi_not_set_up 0 puts it back.
 #define DEVHOOKS_APP_WIFI_NOT_SET_UP 11
+// bench N: the program starts in bench mode N (MDTEST_BENCH_*: 1 the line
+// test in a loop, 2 then the RP's requests, 3 the requests at once with a
+// debug program); bench 0 puts it back.
+#define DEVHOOKS_APP_BENCH 12
 
 /**
  * @brief The application: never returns.

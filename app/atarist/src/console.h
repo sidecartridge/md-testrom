@@ -7,11 +7,38 @@
 #ifndef CONSOLE_H
 #define CONSOLE_H
 
-/* Detect NatFeats; supervisor mode. Call once before any output. */
+/* After hw_takeOver(): the screen cleared, NatFeats detected. Once. */
 void console_init(void);
 
-/* Clear the screen (the report keeps every line). */
+/* Clear the body (the report keeps every line). */
 void console_clear(void);
+
+/* The fixed lines: the title bar, the device line under it, the bottom bar.
+ * Screen only: the report and the host's log do not get them. */
+void console_title(const char *left, const char *right);
+void console_device(const char *text);
+void console_status(const char *left, const char *right);
+
+/* The machine, on the right of every title bar. */
+void console_setMachine(const char *text);
+
+/* A new screen: the body cleared, this title in the bar (right: the machine
+ * when NULL). Screen only. */
+void console_screen(const char *title, const char *right);
+
+/* A new page for a test: console_screen(), and its title in the report and
+ * the host's log after a blank line, as every earlier version wrote it. */
+void console_page(const char *title);
+
+/* A panel: the body (where lines scroll) starts at this row; text placed at
+ * a column and row, screen only, verdict words coloured. */
+void console_bodyFrom(int row);
+int console_bodyRow(void);
+void console_at(int col, int row, const char *text);
+
+/* A line for the report and the host's log, not the screen (a panel draws
+ * its own). */
+void console_record(const char *fmt, ...);
 
 /* One line, printf-style, on the screen, in the report and to NatFeats. */
 void console_line(const char *fmt, ...);

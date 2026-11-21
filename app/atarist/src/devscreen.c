@@ -6,10 +6,11 @@
 #include "chscreen.h"
 #include "commands.h"
 #include "console.h"
+#include "hw.h"
 #include "mdtest.h"
 #include "texts.h"
 
-#define HZ_200 (*(volatile unsigned long *)0x4BA)
+#define HZ_200 hw_ticks
 
 #define INFO_POLL_TICKS 20UL   /* 100 ms */
 #define SELECT_POLL_TICKS 10UL /* 50 ms: the press shows as it happens */
@@ -82,8 +83,7 @@ static int crashed(const char *code) {
 }
 
 void devscreen_info(void) {
-  console_blank();
-  console_line(T_INFO_TITLE);
+  console_page(T_INFO_TITLE);
   begin();
   int state = chscreen_run(MDTEST_TEST_DEVICE_INFO, noParams, INFO_POLL_TICKS,
                            0, text);
@@ -179,8 +179,7 @@ static int selectWatch(const CmdAnswer *a) {
 }
 
 void devscreen_select(void) {
-  console_blank();
-  console_line(T_SEL_TITLE);
+  console_page(T_SEL_TITLE);
   console_line(T_SEL_ASK, (unsigned)MDTEST_SELECT_SECONDS);
   begin();
   selectWasPressed = 0;
@@ -252,8 +251,7 @@ static int yes(const char *question) {
 }
 
 void devscreen_led(void) {
-  console_blank();
-  console_line(T_LED_TITLE);
+  console_page(T_LED_TITLE);
   console_line(T_LED_STARTING);
   begin();
   int step = ledStep(MDTEST_LED_ON);
@@ -361,8 +359,7 @@ static void cardFailure(void) {
 }
 
 void devscreen_card(void) {
-  console_blank();
-  console_line(T_CARD_TITLE);
+  console_page(T_CARD_TITLE);
   console_line(T_CARD_ASK);
   begin();
   cardPhase = MDTEST_SD_PHASE_START;
@@ -440,8 +437,7 @@ static int swapWatch(const CmdAnswer *a) {
 }
 
 void devscreen_cardSwap(void) {
-  console_blank();
-  console_line(T_SWAP_TITLE);
+  console_page(T_SWAP_TITLE);
   console_line(T_SWAP_LOOKING);
   begin();
   swapPhase = MDTEST_SD_SWAP_FIRST;
@@ -475,8 +471,7 @@ void devscreen_cardSwap(void) {
 }
 
 int devscreen_exit(long mch) {
-  console_blank();
-  console_line(T_EXIT_TITLE);
+  console_page(T_EXIT_TITLE);
   if (!chscreen_open(mch) ||
       cmd_send(MDTEST_CMD_EXIT, 0, 0, 0) != CMD_OK) {
     console_line(T_EXIT_FAIL);
@@ -612,8 +607,7 @@ static void wifiFailure(void) {
 }
 
 void devscreen_wifi(void) {
-  console_blank();
-  console_line(T_WIFI_TITLE);
+  console_page(T_WIFI_TITLE);
   console_line(T_WIFI_CHIP);
   begin();
   wifiPhase = MDTEST_WIFI_PHASE_CHIP;
@@ -734,8 +728,7 @@ static void btDevices(void) {
 }
 
 void devscreen_bluetooth(void) {
-  console_blank();
-  console_line(T_BT_TITLE);
+  console_page(T_BT_TITLE);
   console_line(T_BT_STARTING);
   begin();
   btPhase = MDTEST_BT_PHASE_START;

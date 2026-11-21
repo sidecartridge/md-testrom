@@ -134,6 +134,7 @@ target_sources(${PROJECT_NAME} PRIVATE
         hw_config.c
         jobs.c
         network.c
+        reportsave.c
         reset.c
         romemul.c
         sdcard.c

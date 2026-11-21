@@ -1,0 +1,13 @@
+# No microSD card answers: the report is not saved, the program says why and
+# carries on.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+card out
+key s
+say "^WARN  The report could not be saved" 1500
+say "^  no card" 100
+say "^Check a microSD card is in the device" 100
+sdnofile MDTEST-REPORT-00.TXT

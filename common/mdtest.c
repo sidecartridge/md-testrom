@@ -34,7 +34,7 @@ void mdtest_fillWindow(uint16_t *window, const char *version,
   putString(&header[MDTEST_HDR_ID], 4, MDTEST_ID);
   header[MDTEST_HDR_LAYOUT] = MDTEST_LAYOUT_VERSION;
   header[MDTEST_HDR_STATE] = MDTEST_STATE_DATA;
-  header[MDTEST_HDR_RESERVED] = 0;
+  header[MDTEST_HDR_BENCH] = MDTEST_BENCH_NONE;
   putString(&header[MDTEST_HDR_VERSION], MDTEST_HDR_VERSION_WORDS, version);
   putString(&header[MDTEST_HDR_BUILD], MDTEST_HDR_BUILD_WORDS, build);
   sealHeader(header);
@@ -43,6 +43,12 @@ void mdtest_fillWindow(uint16_t *window, const char *version,
 void mdtest_setState(uint16_t *window, uint16_t state) {
   uint16_t *header = &window[MDTEST_HEADER_INDEX];
   header[MDTEST_HDR_STATE] = state;
+  sealHeader(header);
+}
+
+void mdtest_setBench(uint16_t *window, uint16_t bench) {
+  uint16_t *header = &window[MDTEST_HEADER_INDEX];
+  header[MDTEST_HDR_BENCH] = bench;
   sealHeader(header);
 }
 

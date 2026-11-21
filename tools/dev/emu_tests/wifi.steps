@@ -28,7 +28,7 @@ key s
 say "^Keep the Wi-Fi and Bluetooth names heard in the report" 100
 key n
 say "^  names left out" 100
-say "^Report saved as REPORT00.TXT" 500
-floppy REPORT00.TXT "^  Booster's network \(name left out\), -45 dBm \(good\)\r$"
-floppy REPORT00.TXT "^   -45 dBm ch \d+ +WPA2 \(name left out\)\r$"
-floppynot REPORT00.TXT "EmuMD"
+say "^Report saved on the microSD card as MDTEST-REPORT-00.TXT" 1500
+sdfile MDTEST-REPORT-00.TXT "^  Booster's network \(name left out\), -45 dBm \(good\)\r$"
+sdfile MDTEST-REPORT-00.TXT "^   -45 dBm ch \d+ +WPA2 \(name left out\)\r$"
+sdfilenot MDTEST-REPORT-00.TXT "EmuMD"
