@@ -1,0 +1,13 @@
+# The guided run with the gate in place: EmuMD's ROM3 reads fail the line
+# test, so the run stops there and everything after is locked.
+say "^Press a key" 100
+key a
+say "^\[Q\] Quick" 100
+key q
+say "^FAIL  " 6000
+say "^The run stops here: the line test failed" 300
+say "^  Lines         FAIL" 300
+say "^  Commands      LOCKED" 100
+say "^  Bluetooth     LOCKED" 100
+say "^\* The device and the computer do not connect cleanly" 100
+nosay "^PASS  The device takes commands"

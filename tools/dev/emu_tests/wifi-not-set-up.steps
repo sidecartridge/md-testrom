@@ -1,0 +1,18 @@
+# Booster not set up to join a network: the radio and the scan are tested,
+# then a warning, not a failure; joining and the internet are not tried.
+@wifinotsetup
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key w
+say "^Starting the radio chip" 100
+say "^  Radio     MAC 28:CD:C1:4D:44:01, started in \d+ ms" 3000
+say "^  Networks  1 heard, 0 hidden" 100
+say "^WARN  Wi-Fi is not set up to join a network" 100
+say "^  the radio works and hears 1 networks; joining and the internet were not tested" 100
+say "^Set up Wi-Fi in Booster to test the connection too" 100
+nosay "^Joining the network"
+nosay "^FAIL"

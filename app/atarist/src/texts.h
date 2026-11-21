@@ -373,6 +373,135 @@
 #define T_SWAP_UNUSABLE "FAIL  The card came back but cannot be used."
 #define T_SWAP_UNUSABLE_ADVICE "Run the microSD card test to see why."
 
+/* The guided run ([A]) and its summary. */
+#define T_MENU_RUN_ALL "[A] Run all tests, guided"
+#define T_RUN_TITLE "All tests, in order"
+#define T_RUN_CHOOSE \
+  "[Q] Quick, about %lu min, or [T] thorough, about %lu min? [Esc] back"
+#define T_RUN_STOP_HINT "A key between tests stops the run."
+#define T_RUN_OVERRIDDEN "SKIP  Line test: gate overridden (debug build)."
+#define T_RUN_GATE_LINES "The run stops here: the line test failed."
+#define T_RUN_GATE_CHANNEL "The run stops here: the device takes no commands."
+#define T_RUN_SKIP_RADIO \
+  "SKIP  %s: the radio chip does not answer (above)."
+#define T_RUN_ASK_HANDS \
+  "Now the tests that need you: SELECT, the LED, the card out and in? [Y/N]"
+#define T_RUN_STOPPED "The run was stopped."
+#define T_RUN_TOOK "The run took %lu s."
+
+#define T_SUM_TITLE "Summary"
+#define T_SUM_AREA "  %-13s %s"
+#define T_SUM_FINDINGS "What it means"
+#define T_SUM_FINDING "* %s"
+#define T_SUM_ADVICE "  %s"
+#define T_AREA_LINES "Lines"
+#define T_AREA_COMMANDS "Commands"
+#define T_AREA_DEVICE "Device"
+#define T_AREA_CARD "microSD card"
+#define T_AREA_WIFI "Wi-Fi"
+#define T_AREA_BLUETOOTH "Bluetooth"
+#define T_AREA_SELECT "SELECT"
+#define T_AREA_LED "Green LED"
+#define T_AREA_CARD_SWAP "Card out/in"
+#define T_OUT_PASS "PASS"
+#define T_OUT_WARN "WARN"
+#define T_OUT_FAIL "FAIL"
+#define T_OUT_SKIP "SKIP"
+#define T_OUT_LOCKED "LOCKED"
+#define T_OUT_NOT_RUN "not run"
+#define T_OUT_STOPPED "stopped"
+
+#define T_C_ALL_GOOD "Everything tested works."
+#define T_A_ALL_GOOD "No action needed."
+#define T_C_HANDS_NOT_RUN "SELECT, the LED and the card slot were not tested."
+#define T_A_HANDS_NOT_RUN "Run all again and answer Y to test them too."
+#define T_C_STOPPED "The run was stopped before the end."
+#define T_A_STOPPED "Run it again to the end for a full answer."
+#define T_C_LINES "The device and the computer do not connect cleanly."
+#define T_A_LINES \
+  "The line test's finding says where. Switch off, seat the device firmly " \
+  "and test again; if another computer fails the same way, the device " \
+  "needs repair."
+#define T_C_CMD_CACHE \
+  "Commands fail on this Mega STE at 16 MHz with the cache on."
+#define T_A_CMD_CACHE "Switch the cache off or run at 8 MHz, then test again."
+#define T_C_CMD "The device reads well but takes no commands."
+#define T_A_CMD \
+  "Put this program and the firmware on the same release; if it stays, " \
+  "send the report to SidecarTridge."
+#define T_C_LOST "The device stopped answering during a test."
+#define T_A_LOST "Check the device is seated and powered, then test again."
+#define T_C_DEV_CRASH "The firmware has restarted by itself."
+#define T_A_DEV_CRASH \
+  "Note what was running when it did, and send the report to SidecarTridge."
+#define T_C_DEV_TEMP "The device's chip runs outside 0-70 C."
+#define T_A_DEV_TEMP "Check nothing heats the device, then test again."
+#define T_C_DEV_SETTINGS "Booster's settings cannot be read."
+#define T_A_DEV_SETTINGS "Open Booster and save its settings again."
+#define T_C_CARD_NONE "No microSD card answers."
+#define T_A_CARD_NONE \
+  "Push a card in until it clicks; if a good card is never seen, the slot " \
+  "is faulty."
+#define T_C_CARD_START "A microSD card answers but does not start."
+#define T_A_CARD_START \
+  "Try another card; if none starts, the slot or its lines are faulty."
+#define T_C_CARD_OLD "The microSD card is too old for the device."
+#define T_A_CARD_OLD "Use an SDHC or SDXC card."
+#define T_C_CARD_FORMAT "The microSD card has no filesystem the device reads."
+#define T_A_CARD_FORMAT \
+  "Format it as FAT32 or exFAT on a computer; that erases it."
+#define T_C_CARD_FULL "The microSD card is full."
+#define T_A_CARD_FULL "Free some space on it."
+#define T_C_CARD_LOCKED "The microSD card refuses to be written."
+#define T_A_CARD_LOCKED "Check the card's lock switch, or its adapter."
+#define T_C_CARD_WRITE "The microSD card does not keep data."
+#define T_A_CARD_WRITE "Copy your files off it and replace the card."
+#define T_C_CARD_SLOW "The microSD card is slow."
+#define T_A_CARD_SLOW "A faster card makes Booster's downloads quicker."
+#define T_C_CHIP "The radio chip does not answer: no Wi-Fi, Bluetooth or LED."
+#define T_A_CHIP \
+  "Switch the computer off and on; if it stays silent, the Pico W's radio " \
+  "is faulty."
+#define T_C_WIFI_NONE \
+  "Wi-Fi is not set up to join a network: only the radio was tested."
+#define T_A_WIFI_NONE "Set up Wi-Fi in Booster to test the connection too."
+#define T_C_WIFI_NOT_FOUND "Booster's Wi-Fi network is not in range."
+#define T_A_WIFI_NOT_FOUND \
+  "Bring the access point closer; the device needs a 2.4 GHz network that " \
+  "shows its name."
+#define T_C_WIFI_JOIN "The device cannot join the Wi-Fi network."
+#define T_A_WIFI_JOIN \
+  "Check the password in Booster, and that the router hands out addresses."
+#define T_C_WIFI_NET "Wi-Fi works, but the internet is not reached."
+#define T_A_WIFI_NET "Check the router's internet connection and its DNS."
+#define T_C_WIFI_WEAK "The Wi-Fi signal is weak."
+#define T_A_WIFI_WEAK "Bring the device and the access point closer."
+#define T_C_BT_HALF \
+  "Wi-Fi works but Bluetooth does not start: the chip's Bluetooth side is " \
+  "faulty."
+#define T_C_BT_START "Bluetooth does not start."
+#define T_A_BT_START \
+  "Switch the computer off and on; if it stays, the Pico W's radio is " \
+  "faulty."
+#define T_C_BT_SCAN "Bluetooth starts but cannot scan."
+#define T_A_BT_SCAN \
+  "Test again; if it keeps failing, the chip's Bluetooth side is faulty."
+#define T_C_BT_NOTHING "No Bluetooth device was heard."
+#define T_A_BT_NOTHING "Make a phone nearby visible, to check the scan."
+#define T_C_SEL_NONE "The SELECT button was not seen."
+#define T_A_SEL_NONE \
+  "Press it firmly; if it is never seen, the button or its line is faulty."
+#define T_C_SEL_STUCK "The SELECT button reads pressed all the time."
+#define T_A_SEL_STUCK \
+  "Free the button: held 10 s at power-on, it resets the device's settings."
+#define T_C_LED "The radio chip works but the green LED was not seen."
+#define T_A_LED \
+  "The LED or its path on the Pico W is faulty; nothing else needs it."
+#define T_C_SWAP "The card slot does not see a card leave or come back."
+#define T_A_SWAP "Clean the slot and try again; if it stays, it is faulty."
+#define T_C_UNKNOWN "No single cause fits these results."
+#define T_A_UNKNOWN "Save the report and send it to SidecarTridge."
+
 #define T_BT_TITLE "Bluetooth"
 #define T_BT_STARTING "Starting the Bluetooth controller..."
 #define T_BT_CLASSIC "Listening for Bluetooth devices (%u s)..."
@@ -421,6 +550,12 @@
 #define T_WIFI_DNS_OK "  Name      %s is %s, %s ms"
 #define T_WIFI_WEB_OK "  Web       answered %s in %s ms"
 #define T_WIFI_PASS "PASS  Wi-Fi works, out to the internet."
+#define T_WIFI_NOT_SET_UP "WARN  Wi-Fi is not set up to join a network."
+#define T_WIFI_NOT_SET_UP_DETAIL \
+  "  the radio works and hears %s networks; joining and the internet " \
+  "were not tested"
+#define T_WIFI_NOT_SET_UP_ADVICE \
+  "Set up Wi-Fi in Booster to test the connection too."
 #define T_WIFI_WEAK "WARN  The signal is weak."
 #define T_WIFI_WEAK_DETAIL "  %s dBm"
 #define T_WIFI_WEAK_ADVICE \

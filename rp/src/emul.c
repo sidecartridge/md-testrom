@@ -16,6 +16,7 @@
 #include "commemul.h"
 #include "build_id.h"
 #include "cardtest.h"
+#include "wifitest.h"
 #include "devtests.h"
 #include "gconfig.h"
 #include "health.h"
@@ -127,6 +128,12 @@ static uint32_t emul_devhooksApp(uint16_t commandId, const uint16_t *payload,
       cardtestFault = payload[0];
       DPRINTF("The microSD card fault: %u\n", payload[0]);
       return 1;
+    case DEVHOOKS_APP_WIFI_NOT_SET_UP:
+      if (payloadSize < 2U) return 0;
+      wifitestNotSetUp = payload[0] != 0U;
+      DPRINTF("Wi-Fi %s\n", wifitestNotSetUp ? "read as not set up"
+                                              : "as Booster has it");
+      return 1;
     case DEVHOOKS_APP_HEALTH:
       if (payloadSize < 2U || payload[0] == HEALTH_TEST_NONE ||
           payload[0] > HEALTH_TEST_STACK_OVERFLOW) {
@@ -196,6 +203,8 @@ void emul_start() {
     // MDTEST_CARD_FAULT="N": the microSD card fails (cardtest.h).
     const char *card = getenv("MDTEST_CARD_FAULT");
     if (card) cardtestFault = (uint32_t)strtoul(card, NULL, 10);
+    // MDTEST_WIFI_NOT_SET_UP: Booster's Wi-Fi as if not set up to join.
+    if (getenv("MDTEST_WIFI_NOT_SET_UP")) wifitestNotSetUp = true;
   }
 #endif
 

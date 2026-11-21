@@ -162,11 +162,21 @@ void console_privateLine(const char *name, const char *fmt, ...) {
 
 void console_blank(void) { emit(""); }
 
+/* Keys through GEMDOS, not the BIOS: GEMDOS's screen output looks for
+ * Ctrl-S and Ctrl-C and moves a key typed meanwhile into its own type-ahead,
+ * where the BIOS calls never see it (a key pressed while a job printed its
+ * progress was lost). */
 int console_key(void) {
-  long key = Bconin(2);
+  long key = Crawcin();
   int ch = (int)(key & 0xFF);
   if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
   return ch;
+}
+
+int console_keyPressed(void) {
+  if (!Cconis()) return 0;
+  (void)Crawcin();
+  return 1;
 }
 
 int console_reportLines(void) { return reportCount; }

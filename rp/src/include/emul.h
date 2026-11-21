@@ -51,6 +51,9 @@
 // card answers, 2 no free space, 3 a write fails, 4 a byte read back differs;
 // card_fault 0 puts it back.
 #define DEVHOOKS_APP_CARD_FAULT 10
+// wifi_not_set_up 1: the Wi-Fi test reads Booster's Wi-Fi as not set up to
+// join a network (a warning, after the scan); wifi_not_set_up 0 puts it back.
+#define DEVHOOKS_APP_WIFI_NOT_SET_UP 11
 
 /**
  * @brief The application: never returns.

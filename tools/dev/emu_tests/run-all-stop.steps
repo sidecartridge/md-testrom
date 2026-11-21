@@ -1,0 +1,12 @@
+# The guided run stopped: a key during the line test stops it there, with
+# the summary of what it found.
+say "^Press a key" 100
+key a
+say "^\[Q\] Quick" 100
+key q
+say "^Words in order +ROM4" 3000
+key x
+say "^  Lines         stopped" 1500
+say "^  Commands      LOCKED" 100
+say "^\* The run was stopped before the end" 100
+nosay "^The run stops here: the line test failed"

@@ -133,7 +133,8 @@ SELECT within 10 s), `job.py run led 1` (on; 0 off, 2 blink, 3 off and the chip 
 `job.py run sd_card` (the card described, its file written, read back and deleted), `job.py run
 sd_swap 30` (take the card out and put it back within 30 s each); `swd.py app card_fault N` makes
 the card fail as `@cardfault N` does. `job.py run wifi` runs the Wi-Fi test to the web server;
-`swd.py app chip_fail 1` makes it stop at the chip.
+`swd.py app chip_fail 1` makes it stop at the chip. `swd.py app wifi_not_set_up 1` makes it read
+Booster's Wi-Fi as not set up to join (a warning after the scan), as `@wifinotsetup` does.
 `job.py run bluetooth` starts the controller and scans (about 14 s); `chip_fail` stops it at the
 chip too.
 

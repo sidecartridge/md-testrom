@@ -1,0 +1,21 @@
+# The guided run with Booster's Wi-Fi not set up: Wi-Fi is a warning in the
+# summary, with its advice, and Bluetooth still runs.
+@wifinotsetup
+@sdapps
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key a
+say "^\[Q\] Quick" 100
+key q
+say "^WARN  Wi-Fi is not set up to join a network" 45000
+say "^PASS  Bluetooth works" 3000
+say "^Now the tests that need you" 1500
+key n
+say "^  Wi-Fi         WARN" 300
+say "^\* Wi-Fi is not set up to join a network: only the radio was tested" 100
+say "^  Set up Wi-Fi in Booster to test the connection too" 100
+nosay "^\* Everything tested works"
