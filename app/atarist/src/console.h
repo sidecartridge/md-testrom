@@ -22,6 +22,9 @@ void console_blank(void);
 /* Wait for a key and return it, lower case. */
 int console_key(void);
 
+/* Whether a key was pressed, the key taken. */
+int console_keyPressed(void);
+
 /* Break text into lines of fewer than width characters at spaces, each
  * continuation indented (under a verdict's text, or as the line itself is),
  * and hand each to put. */

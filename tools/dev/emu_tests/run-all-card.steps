@@ -1,0 +1,19 @@
+# The guided run with no microSD card answering: the card's finding.
+@cardfault 1
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key a
+say "^\[Q\] Quick, about \d+ min, or \[T\] thorough" 100
+key q
+say "^SKIP  Line test: gate overridden" 100
+say "^PASS  The command channel is clean" 40000
+say "^FAIL  No microSD card answers" 3000
+say "^Now the tests that need you" 6000
+key n
+say "^  microSD card  FAIL" 300
+say "^\* No microSD card answers" 100
+nosay "^\* Everything tested works"

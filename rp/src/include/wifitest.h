@@ -13,9 +13,16 @@
 #ifndef WIFITEST_H
 #define WIFITEST_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "mdtest.h"
+
+#if (defined(_DEBUG) && (_DEBUG != 0)) || (defined(EMUMD) && EMUMD)
+// Debug and EmuMD builds: Booster's Wi-Fi as if not set up to join a
+// network (swd.py app wifi_not_set_up 1, MDTEST_WIFI_NOT_SET_UP).
+extern volatile bool wifitestNotSetUp;
+#endif
 
 /** @brief Begin the Wi-Fi test. */
 void wifitest_begin(uint32_t nowMs);

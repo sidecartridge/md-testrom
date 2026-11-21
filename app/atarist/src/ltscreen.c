@@ -24,13 +24,7 @@ static const int selectGpio[2] = {22, 26};
 static DgStats stats;
 static unsigned short runNumber;
 
-static int keyPressed(void) {
-  if (Bconstat(2)) {
-    (void)Bconin(2);
-    return 1;
-  }
-  return 0;
-}
+static int keyPressed(void) { return console_keyPressed(); }
 
 unsigned long ltscreen_estimate(const LtSizes *sizes) {
   unsigned long reads = 0;

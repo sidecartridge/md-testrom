@@ -1,0 +1,31 @@
+# The guided run on a good device: the gate overridden (EmuMD serves no ROM3
+# data), the channel, the device tests, no hands, and the summary.
+@sdapps
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key a
+say "^\[Q\] Quick, about \d+ min, or \[T\] thorough" 100
+key q
+say "^SKIP  Line test: gate overridden" 100
+say "^PASS  The command channel is clean" 40000
+say "^PASS  The microSD card works" 3000
+say "^PASS  Wi-Fi works, out to the internet" 3000
+say "^PASS  Bluetooth works" 3000
+say "^Now the tests that need you" 1500
+key n
+say "^Summary" 300
+say "^  Lines         SKIP" 100
+say "^  Commands      PASS" 100
+say "^  Device        PASS" 100
+say "^  microSD card  PASS" 100
+say "^  Wi-Fi         PASS" 100
+say "^  Bluetooth     PASS" 100
+say "^  SELECT        not run" 100
+say "^\* Everything tested works" 100
+say "^\* SELECT, the LED and the card slot were not tested" 100
+say "^The run took \d+ s" 100
+log "ROM3 is test data again" 500

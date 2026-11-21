@@ -54,7 +54,8 @@ starts it again), "@chipfail" (the radio chip fails to start, as a dead
 one would), "@cardfault N" (the microSD card fails as CARDTEST_FAULT_N in
 rp/src/include/cardtest.h), "@sdapps" (Booster's apps folder on the card),
 "@wifi HOW" (EmuMD's Wi-Fi: badauth, nonet, fail or off), "@rssi DBM"
-(the signal it reports), "@btfail" (the Bluetooth controller does not
+(the signal it reports), "@wifinotsetup" (Booster's Wi-Fi read as not set
+up to join a network), "@btfail" (the Bluetooth controller does not
 start) and "@btnone" (a Bluetooth scan hears nothing) set those options. The card's folder always holds one file of the user's,
 USER.TXT.
 
@@ -421,7 +422,7 @@ def check_floppy(checks, files_dir, sd_dir=None, sd_before=None):
 
 OPTIONS = ("hatari", "monitor", "memsize", "layout", "protect", "fault", "debug",
            "protocol", "drop", "bench", "twice", "chipfail", "cardfault", "sdapps",
-           "wifi", "rssi", "btfail", "btnone")
+           "wifi", "rssi", "btfail", "btnone", "wifinotsetup")
 
 
 def parse_steps(name, lines, opts):
@@ -507,6 +508,8 @@ def run_one(setup, tests, extra_steps, disk, timeout):
     if opts.get("cardfault"):
         env["MDTEST_CARD_FAULT"] = opts["cardfault"]
     env["EMU_CARD_OUT_FILE"] = str(run_dir / "card-out")
+    if "wifinotsetup" in opts:
+        env["MDTEST_WIFI_NOT_SET_UP"] = "1"
     if "btfail" in opts:
         env["EMU_BT_FAIL"] = "1"
     if "btnone" in opts:

@@ -18,6 +18,7 @@
 #include "machine.h"
 #include "mdtest.h"
 #include "report.h"
+#include "summary.h"
 #include "texts.h"
 
 /* The window layout this program reads; a test build overrides it to show
@@ -111,6 +112,7 @@ static int showDevice(void) {
 static void showMenu(int lineTestReady) {
   console_blank();
   if (lineTestReady) {
+    console_line(T_MENU_RUN_ALL);
     console_line(T_MENU_LINE);
     console_line(T_MENU_LINE_LONG);
     if (machine_isMegaSte(&machine)) console_line(T_MENU_LINE_MSTE);
@@ -206,11 +208,7 @@ static int benchFile(void) {
   return BENCH_LINE;
 }
 
-static int keyPressed(void) {
-  if (!Bconstat(2)) return 0;
-  (void)Bconin(2);
-  return 1;
-}
+static int keyPressed(void) { return console_keyPressed(); }
 
 static void waitTicks(unsigned long ticks) {
   unsigned long start = *(volatile unsigned long *)0x4BA;
@@ -284,6 +282,137 @@ static int benchMode(void) {
   return 1;
 }
 
+/* The guided run ([A]): the line test, the command channel, then the
+ * device tests, each layer only once the one under it passed; the tests
+ * that need the user only if they say so; then the summary. A key between
+ * two tests (or during the line test) stops it with what it has. */
+#define RUN_DEVICE_SECONDS 40UL /* the channel's test and the device tests: 38 s on a Mega ST */
+#define HZ_200 (*(volatile unsigned long *)0x4BA)
+#define KEY_ESC 27
+
+static Results results;
+
+static void putSummary(const char *line, void *ctx) {
+  (void)ctx;
+  console_line("%s", line);
+}
+
+/* A key pressed since the last test: this area and the rest stopped. */
+static int stoppedAt(Area area) {
+  if (!keyPressed()) return 0;
+  console_line(T_RUN_STOPPED);
+  results.outcome[area] = OUT_STOPPED;
+  return 1;
+}
+
+static void runDevice(Area area, void (*test)(void)) {
+  test();
+  devscreen_verdict(&results.outcome[area], &results.reason[area]);
+}
+
+/* A test the silent radio chip makes meaningless: said once, skipped. */
+static int radioSilent(Area area, const char *name) {
+  if (results.reason[AREA_WIFI] != R_CHIP_SILENT &&
+      results.reason[AREA_BLUETOOTH] != R_CHIP_SILENT) {
+    return 0;
+  }
+  console_blank();
+  console_line(T_RUN_SKIP_RADIO, name);
+  results.outcome[area] = OUT_SKIP;
+  results.reason[area] = R_CHIP_SILENT;
+  return 1;
+}
+
+static void runTests(const LtSizes *sizes) {
+  for (int i = 0; i < AREA_COUNT; i++) results.outcome[i] = OUT_LOCKED;
+
+  if (overridden) {
+    console_blank();
+    console_line(T_RUN_OVERRIDDEN);
+    results.outcome[AREA_LINES] = OUT_SKIP;
+  } else {
+    giveBackRom3();
+    LtVerdict v = ltscreen_run(sizes, ltscreen_estimate(sizes));
+    if (v == LT_STOPPED) {
+      results.outcome[AREA_LINES] = OUT_STOPPED;
+      return;
+    }
+    if (v != LT_PASS) {
+      results.outcome[AREA_LINES] = OUT_FAIL;
+      results.reason[AREA_LINES] = R_LINES;
+      console_line(T_RUN_GATE_LINES);
+      return;
+    }
+    results.outcome[AREA_LINES] = OUT_PASS;
+    lineTestPassed();
+  }
+  if (stoppedAt(AREA_COMMANDS)) return;
+
+  channelTest();
+  if (!channelPassed) {
+    results.outcome[AREA_COMMANDS] = OUT_FAIL;
+    results.reason[AREA_COMMANDS] =
+        machine_isMegaSte(&machine) && machine.msteFast && machine.msteCache
+            ? R_CMD_CACHE
+            : R_CMD;
+    console_line(T_RUN_GATE_CHANNEL);
+    return;
+  }
+  results.outcome[AREA_COMMANDS] = OUT_PASS;
+  for (int i = AREA_DEVICE; i < AREA_COUNT; i++) results.outcome[i] = OUT_NOT_RUN;
+  if (!chscreen_open(machine.mch)) {
+    results.outcome[AREA_DEVICE] = OUT_FAIL;
+    results.reason[AREA_DEVICE] = R_LOST;
+    return;
+  }
+
+  if (stoppedAt(AREA_DEVICE)) return;
+  runDevice(AREA_DEVICE, devscreen_info);
+  if (stoppedAt(AREA_CARD)) return;
+  runDevice(AREA_CARD, devscreen_card);
+  if (stoppedAt(AREA_WIFI)) return;
+  runDevice(AREA_WIFI, devscreen_wifi);
+  if (stoppedAt(AREA_BLUETOOTH)) return;
+  if (!radioSilent(AREA_BLUETOOTH, T_AREA_BLUETOOTH)) {
+    runDevice(AREA_BLUETOOTH, devscreen_bluetooth);
+  }
+
+  if (stoppedAt(AREA_SELECT)) return;
+  console_blank();
+  console_line(T_RUN_ASK_HANDS);
+  int key;
+  do {
+    key = console_key();
+  } while (key != 'y' && key != 'n');
+  console_line(key == 'y' ? T_YES : T_NO);
+  if (key != 'y') return;
+  runDevice(AREA_SELECT, devscreen_select);
+  if (stoppedAt(AREA_LED)) return;
+  if (!radioSilent(AREA_LED, T_AREA_LED)) runDevice(AREA_LED, devscreen_led);
+  if (stoppedAt(AREA_CARD_SWAP)) return;
+  runDevice(AREA_CARD_SWAP, devscreen_cardSwap);
+}
+
+static void runAll(void) {
+  unsigned long quick = ltscreen_estimate(&lt_quick) + RUN_DEVICE_SECONDS;
+  unsigned long thorough = ltscreen_estimate(&lt_long) + RUN_DEVICE_SECONDS;
+  console_blank();
+  console_line(T_RUN_TITLE);
+  console_line(T_RUN_CHOOSE, (quick + 59) / 60, (thorough + 59) / 60);
+  int key;
+  do {
+    key = console_key();
+  } while (key != 'q' && key != 't' && key != KEY_ESC);
+  if (key == KEY_ESC) return;
+  console_line(T_RUN_STOP_HINT);
+  unsigned long start = HZ_200;
+  summary_clear(&results);
+  runTests(key == 't' ? &lt_long : &lt_quick);
+  giveBackRom3();
+  summary_write(&results, putSummary, 0);
+  console_line(T_RUN_TOOK, (HZ_200 - start) / 200);
+}
+
 static void run(void) {
   console_init();
   console_clear();
@@ -310,7 +439,9 @@ static void run(void) {
       console_line(T_MENU_PROMPT);
       continue;
     }
-    if (ready && key == 'l') {
+    if (ready && key == 'a') {
+      runAll();
+    } else if (ready && key == 'l') {
       lineTest(&lt_quick);
     } else if (ready && key == 'k') {
       lineTest(&lt_long);

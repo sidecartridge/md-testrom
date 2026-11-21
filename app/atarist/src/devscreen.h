@@ -6,6 +6,8 @@
 #ifndef DEVSCREEN_H
 #define DEVSCREEN_H
 
+#include "summary.h"
+
 void devscreen_info(void);
 void devscreen_select(void);
 void devscreen_led(void);
@@ -24,6 +26,9 @@ void devscreen_wifi(void);
 
 /* Bluetooth: the controller, then the devices it hears. */
 void devscreen_bluetooth(void);
+
+/* The last device test's outcome and why, for the guided run. */
+void devscreen_verdict(Outcome *o, Reason *r);
 
 int devscreen_exit(long mch);
 

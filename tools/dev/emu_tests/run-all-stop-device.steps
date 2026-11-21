@@ -1,0 +1,21 @@
+# A key pressed while commands run (the command channel's test prints as
+# it goes, and GEMDOS takes a key typed meanwhile) stops the guided run
+# before the next test.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key a
+say "^\[Q\] Quick" 100
+key q
+say "^SKIP  Line test: gate overridden" 100
+say "^Hello burst +500  PASS" 3000
+key x
+say "^PASS  The command channel is clean" 40000
+say "^The run was stopped" 300
+nosay "^Device information"
+say "^  Commands      PASS" 300
+say "^  Device        stopped" 100
+say "^\* The run was stopped before the end" 100

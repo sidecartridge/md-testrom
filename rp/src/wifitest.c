@@ -94,6 +94,14 @@ static uint16_t seenCount;   // kept, at most SEEN_MAX
 static uint16_t heardCount;  // every distinct name heard, and the hidden
 static uint16_t hiddenCount;
 static char configured[NAME_BYTES];
+static bool joins;  // Booster names a network to join
+
+#if (defined(_DEBUG) && (_DEBUG != 0)) || (defined(EMUMD) && EMUMD)
+volatile bool wifitestNotSetUp = false;
+#define NOT_SET_UP wifitestNotSetUp
+#else
+#define NOT_SET_UP false
+#endif
 
 static uint32_t joinedMs;    // joined, waiting for an address (0: not yet)
 static bool dnsDone;
@@ -241,6 +249,8 @@ static int scanResult(void *env, const cyw43_ev_scan_result_t *res) {
 static void scanStart(uint32_t nowMs) {
   const char *ssid = settingValue(PARAM_WIFI_SSID);
   snprintf(configured, sizeof(configured), "%s", ssid != NULL ? ssid : "");
+  if (NOT_SET_UP) configured[0] = '\0';
+  joins = configured[0] != '\0';
   cyw43_wifi_scan_options_t options;
   memset(&options, 0, sizeof(options));
   int answer = cyw43_wifi_scan(&cyw43_state, &options, NULL, scanResult);
@@ -265,7 +275,8 @@ static void scanLines(void) {
     jobs_resultLine("net=%d|%u|%s|%s", seen[i].rssi, seen[i].channel,
                     authText(seen[i].auth), seen[i].name);
   }
-  if (configured[0] == '\0') {
+  if (!joins) {
+    // Not a fault: the radio and the scan were tested, joining cannot be.
     jobs_resultLine("wifi=none");
     return;
   }
@@ -288,8 +299,9 @@ static void scanStep(uint32_t nowMs) {
   if (cyw43_wifi_scan_active(&cyw43_state) && !timedOut) return;
   scanLines();
   if (timedOut) jobs_resultLine("scan_complete=no");
-  if (configured[0] == '\0') {
-    fail("no network configured");
+  if (!joins) {
+    endState = MDTEST_JOB_DONE;
+    step = STEP_END;
     return;
   }
   enterPhase(MDTEST_WIFI_PHASE_JOIN, nowMs);

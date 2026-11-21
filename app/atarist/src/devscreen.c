@@ -29,6 +29,23 @@
 #define TEMP_HIGH_C 70
 
 static char text[CH_RESULT_BYTES];
+
+/* The last test's verdict, for the guided run: a test that returns early
+ * because the device stopped answering stays "lost". */
+static Outcome lastOutcome;
+static Reason lastReason;
+
+static void verdict(Outcome o, Reason r) {
+  lastOutcome = o;
+  lastReason = r;
+}
+
+static void begin(void) { verdict(OUT_FAIL, R_LOST); }
+
+void devscreen_verdict(Outcome *o, Reason *r) {
+  *o = lastOutcome;
+  *r = lastReason;
+}
 static const unsigned short noParams[4] = {0, 0, 0, 0};
 
 /* A value, up to its newline, copied (empty when absent); the last
@@ -67,13 +84,16 @@ static int crashed(const char *code) {
 void devscreen_info(void) {
   console_blank();
   console_line(T_INFO_TITLE);
+  begin();
   int state = chscreen_run(MDTEST_TEST_DEVICE_INFO, noParams, INFO_POLL_TICKS,
                            0, text);
   if (state < 0) return;
   if (state != MDTEST_JOB_DONE) {
     console_line(T_JOB_FAILED, MDTEST_TEST_DEVICE_INFO);
+    verdict(OUT_FAIL, R_NONE);
     return;
   }
+  verdict(OUT_PASS, R_NONE);
   console_line(T_INFO_FIRMWARE, value("version"), value("build"));
   console_line(T_INFO_BOARD, value("uid"));
   console_line(T_INFO_FLASH, value("flash_kb"));
@@ -111,11 +131,13 @@ void devscreen_info(void) {
     console_line(T_INFO_WARN_LOOP);
     console_line(T_INFO_WARN_LOOP_DETAIL, value("crashes"));
     console_line(T_INFO_WARN_CRASH_ADVICE);
+    verdict(OUT_WARN, R_DEV_CRASH);
     warned = 1;
   } else if (crashed(restart)) {
     console_line(T_INFO_WARN_CRASH);
     console_line(T_INFO_WARN_CRASH_DETAIL, restart);
     console_line(T_INFO_WARN_CRASH_ADVICE);
+    verdict(OUT_WARN, R_DEV_CRASH);
     warned = 1;
   }
   if (has("temp_c")) {
@@ -124,12 +146,14 @@ void devscreen_info(void) {
       console_line(T_INFO_WARN_TEMP);
       console_line(T_INFO_WARN_TEMP_DETAIL, value("temp_c"), TEMP_LOW_C,
                    TEMP_HIGH_C);
+      if (!warned) verdict(OUT_WARN, R_DEV_TEMP);
       warned = 1;
     }
   }
   if (!settings || chscreen_valueIs(text, "app_entry", "missing")) {
     console_line(T_INFO_WARN_SETTINGS);
     console_line(T_INFO_WARN_SETTINGS_ADVICE);
+    if (!warned) verdict(OUT_WARN, R_DEV_SETTINGS);
     warned = 1;
   }
   if (!warned) console_line(T_INFO_PASS);
@@ -158,6 +182,7 @@ void devscreen_select(void) {
   console_blank();
   console_line(T_SEL_TITLE);
   console_line(T_SEL_ASK, (unsigned)MDTEST_SELECT_SECONDS);
+  begin();
   selectWasPressed = 0;
   selectWarned = 0;
   int state = chscreen_run(MDTEST_TEST_SELECT, noParams, SELECT_POLL_TICKS,
@@ -170,18 +195,21 @@ void devscreen_select(void) {
     console_line(T_SEL_PASS);
     console_line(T_SEL_PASS_DETAIL, value("press_ms"));
     console_line(T_SEL_AFTER);
+    verdict(OUT_PASS, R_NONE);
     return;
   }
   if (chscreen_valueIs(text, "error", "pressed from the start")) {
     console_line(T_SEL_STUCK);
     console_line(T_SEL_STUCK_DETAIL, value("held_ms"));
     console_line(T_SEL_STUCK_ADVICE);
+    verdict(OUT_FAIL, R_SEL_STUCK);
     return;
   }
   console_line(T_SEL_NONE);
   console_line(T_SEL_NONE_DETAIL, (unsigned)MDTEST_SELECT_SECONDS,
                value("error"));
   console_line(T_SEL_NONE_ADVICE);
+  verdict(OUT_FAIL, R_SEL_NONE);
 }
 
 /* One LED step: the job run to its end. 1 when the chip took it; 0 when it
@@ -202,7 +230,9 @@ static int ledStep(unsigned short mode) {
     console_line(T_LED_NO_CHIP);
     console_line(T_LED_NO_CHIP_DETAIL, value("chip_error"));
     console_line(T_LED_NO_CHIP_ADVICE);
+    verdict(OUT_FAIL, R_CHIP_SILENT);
   } else {
+    verdict(OUT_FAIL, R_NONE);
     console_line(T_LED_CHIP_ERROR);
     console_line(T_LED_CHIP_ERROR_DETAIL, value("error"), value("led_error"));
     console_line(T_LED_CHIP_ERROR_ADVICE);
@@ -225,6 +255,7 @@ void devscreen_led(void) {
   console_blank();
   console_line(T_LED_TITLE);
   console_line(T_LED_STARTING);
+  begin();
   int step = ledStep(MDTEST_LED_ON);
   if (step < 0) return;
   if (step == 0) {
@@ -254,8 +285,10 @@ void devscreen_led(void) {
   console_blank();
   if (on && off && blinking) {
     console_line(T_LED_PASS);
+    verdict(OUT_PASS, R_NONE);
     return;
   }
+  verdict(OUT_FAIL, R_LED_UNSEEN);
   console_line(T_LED_FAIL);
   console_line(T_LED_FAIL_DETAIL, on ? T_YES : T_NO, off ? T_YES : T_NO,
                blinking ? T_YES : T_NO);
@@ -280,41 +313,50 @@ static void cardFailure(void) {
     console_line(T_CARD_NONE);
     console_line(T_CARD_NONE_DETAIL);
     console_line(T_CARD_NONE_ADVICE);
+    verdict(OUT_FAIL, R_CARD_NONE);
   } else if (chscreen_valueIs(text, "card", "standard capacity")) {
     console_line(T_CARD_OLD);
     console_line(T_CARD_OLD_DETAIL);
     console_line(T_CARD_OLD_ADVICE);
+    verdict(OUT_FAIL, R_CARD_OLD);
   } else if (chscreen_valueIs(text, "card", "failed")) {
     console_line(T_CARD_START);
     console_line(T_CARD_START_ADVICE);
+    verdict(OUT_FAIL, R_CARD_START);
   } else if (chscreen_valueIs(text, "filesystem", "none")) {
     console_line(T_CARD_NO_FS);
     console_line(T_CARD_FS_DETAIL, value("mount_error"));
     console_line(T_CARD_NO_FS_ADVICE);
+    verdict(OUT_FAIL, R_CARD_FORMAT);
   } else if (chscreen_valueIs(text, "filesystem", "unreadable")) {
     console_line(T_CARD_BAD_FS);
     console_line(T_CARD_FS_DETAIL, value("mount_error"));
     console_line(T_CARD_BAD_FS_ADVICE);
+    verdict(OUT_FAIL, R_CARD_FORMAT);
   } else if (chscreen_valueIs(text, "error", "card full")) {
     console_line(T_CARD_FULL);
     console_line(T_CARD_FULL_DETAIL, value("free_mb"),
                  (unsigned)MDTEST_SD_FILE_KB);
     console_line(T_CARD_FULL_ADVICE);
+    verdict(OUT_FAIL, R_CARD_FULL);
   } else if (chscreen_valueIs(text, "error", "write protected")) {
     console_line(T_CARD_LOCKED);
     console_line(T_CARD_LOCKED_DETAIL);
     console_line(T_CARD_LOCKED_ADVICE);
+    verdict(OUT_FAIL, R_CARD_LOCKED);
   } else if (chscreen_valueIs(text, "error", "data differs")) {
     console_line(T_CARD_DIFFERS);
     console_line(T_CARD_DIFFERS_DETAIL, value("mismatch_at"),
                  value("mismatch_read"), value("mismatch_expected"));
     console_line(T_CARD_DIFFERS_ADVICE);
+    verdict(OUT_FAIL, R_CARD_WRITE);
   } else {
     console_line(T_CARD_WRITE);
     console_line(T_CARD_WRITE_DETAIL, value("error"),
                  has("written_kb") ? value("written_kb") : "0",
                  has("fs_error") ? value("fs_error") : "-");
     console_line(T_CARD_WRITE_ADVICE);
+    verdict(OUT_FAIL, R_CARD_WRITE);
   }
 }
 
@@ -322,6 +364,7 @@ void devscreen_card(void) {
   console_blank();
   console_line(T_CARD_TITLE);
   console_line(T_CARD_ASK);
+  begin();
   cardPhase = MDTEST_SD_PHASE_START;
   int state = chscreen_run(MDTEST_TEST_SD_CARD, noParams, CARD_POLL_TICKS,
                            cardWatch, text);
@@ -351,8 +394,10 @@ void devscreen_card(void) {
   if (state == MDTEST_JOB_DONE) {
     console_blank();
     console_line(T_CARD_PASS);
+    verdict(OUT_PASS, R_NONE);
     if (atol(value("write_kbs")) < CARD_SLOW_KBS ||
         atol(value("read_kbs")) < CARD_SLOW_KBS) {
+      verdict(OUT_WARN, R_CARD_SLOW);
       console_line(T_CARD_SLOW);
       console_line(T_CARD_SLOW_DETAIL, (unsigned)CARD_SLOW_KBS);
       console_line(T_CARD_SLOW_ADVICE);
@@ -361,6 +406,7 @@ void devscreen_card(void) {
     cardFailure();
   } else {
     console_line(T_JOB_FAILED, MDTEST_TEST_SD_CARD);
+    verdict(OUT_FAIL, R_NONE);
   }
   if (has("file_left")) {
     console_line(T_CARD_LEFT);
@@ -397,6 +443,7 @@ void devscreen_cardSwap(void) {
   console_blank();
   console_line(T_SWAP_TITLE);
   console_line(T_SWAP_LOOKING);
+  begin();
   swapPhase = MDTEST_SD_SWAP_FIRST;
   swapCardAtStart = 0;
   int state = chscreen_run(MDTEST_TEST_SD_SWAP, noParams, CARD_POLL_TICKS,
@@ -407,8 +454,10 @@ void devscreen_cardSwap(void) {
     console_line(T_SWAP_BACK);
   }
   console_blank();
+  verdict(OUT_FAIL, R_SWAP);
   if (state == MDTEST_JOB_DONE) {
     console_line(T_SWAP_PASS);
+    verdict(OUT_PASS, R_NONE);
   } else if (chscreen_valueIs(text, "error", "card not taken out")) {
     console_line(T_SWAP_NOT_OUT);
     console_line(T_SWAP_WAITED, (unsigned)MDTEST_SD_SWAP_SECONDS);
@@ -504,50 +553,61 @@ static void wifiFailure(void) {
     console_line(T_WIFI_CHIP_FAIL);
     console_line(T_WIFI_CHIP_FAIL_DETAIL);
     console_line(T_WIFI_CHIP_FAIL_ADVICE);
+    verdict(OUT_FAIL, R_CHIP_SILENT);
   } else if (chscreen_valueIs(text, "error", "scan failed")) {
     console_line(T_WIFI_SCAN_FAIL);
     console_line(T_WIFI_SCAN_FAIL_DETAIL, value("scan_error"));
     console_line(T_WIFI_SCAN_FAIL_ADVICE);
+    verdict(OUT_FAIL, R_NONE);
   } else if (chscreen_valueIs(text, "error", "no network configured")) {
     console_line(T_WIFI_NONE);
     console_line(T_WIFI_NONE_DETAIL);
     console_line(T_WIFI_NONE_ADVICE);
+    verdict(OUT_WARN, R_WIFI_NONE);
   } else if (chscreen_valueIs(text, "error", "network not found")) {
     console_line(T_WIFI_NOT_FOUND);
     console_privateLine(ssid, T_WIFI_NOT_FOUND_DETAIL, ssid);
     console_line(T_WIFI_NOT_FOUND_ADVICE);
+    verdict(OUT_FAIL, R_WIFI_NOT_FOUND);
   } else if (chscreen_valueIs(text, "error", "wrong password")) {
     console_line(T_WIFI_PASSWORD);
     console_privateLine(ssid, T_WIFI_PASSWORD_DETAIL, ssid);
     console_line(T_WIFI_PASSWORD_ADVICE);
+    verdict(OUT_FAIL, R_WIFI_JOIN);
   } else if (chscreen_valueIs(text, "error", "no address")) {
     console_line(T_WIFI_NO_ADDRESS);
     console_line(T_WIFI_NO_ADDRESS_DETAIL);
     console_line(T_WIFI_NO_ADDRESS_ADVICE);
+    verdict(OUT_FAIL, R_WIFI_JOIN);
   } else if (chscreen_valueIs(text, "error", "no router") ||
              chscreen_valueIs(text, "error", "router silent")) {
     console_line(T_WIFI_ROUTER_FAIL);
     console_line(T_WIFI_ROUTER_FAIL_DETAIL, value("gateway"));
     console_line(T_WIFI_ROUTER_FAIL_ADVICE);
+    verdict(OUT_FAIL, R_WIFI_NET);
   } else if (chscreen_valueIs(text, "error", "name not found") ||
              chscreen_valueIs(text, "error", "dns silent")) {
     console_line(T_WIFI_DNS_FAIL);
     console_line(T_WIFI_DNS_FAIL_DETAIL, MDTEST_WIFI_HOST, value("dns"),
                  value("error"));
     console_line(T_WIFI_DNS_FAIL_ADVICE);
+    verdict(OUT_FAIL, R_WIFI_NET);
   } else if (chscreen_valueIs(text, "error", "out of memory")) {
     console_line(T_WIFI_MEMORY);
     console_line(T_WIFI_MEMORY_DETAIL, value("error"));
     console_line(T_WIFI_MEMORY_ADVICE);
+    verdict(OUT_FAIL, R_NONE);
   } else if (has("server")) {
     console_line(T_WIFI_WEB_FAIL);
     console_line(T_WIFI_WEB_FAIL_DETAIL, MDTEST_WIFI_HOST, value("server"),
                  value("error"));
     console_line(T_WIFI_WEB_FAIL_ADVICE);
+    verdict(OUT_FAIL, R_WIFI_NET);
   } else {
     console_line(T_WIFI_JOIN_FAIL);
     console_privateLine(ssid, T_WIFI_JOIN_FAIL_DETAIL, ssid, value("error"));
     console_line(T_WIFI_JOIN_FAIL_ADVICE);
+    verdict(OUT_FAIL, R_WIFI_JOIN);
   }
 }
 
@@ -555,6 +615,7 @@ void devscreen_wifi(void) {
   console_blank();
   console_line(T_WIFI_TITLE);
   console_line(T_WIFI_CHIP);
+  begin();
   wifiPhase = MDTEST_WIFI_PHASE_CHIP;
   int state = chscreen_run(MDTEST_TEST_WIFI, noParams, WIFI_POLL_TICKS,
                            wifiWatch, text);
@@ -595,19 +656,30 @@ void devscreen_wifi(void) {
   }
   if (has("web_ms")) console_line(T_WIFI_WEB_OK, value("web_status"),
                                   value("web_ms"));
-  if (state == MDTEST_JOB_DONE) {
+  int notSetUp = chscreen_valueIs(text, "wifi", "none");
+  if (state == MDTEST_JOB_DONE && notSetUp) {
+    /* Not a fault: the radio and the scan were tested, joining cannot be. */
+    console_blank();
+    console_line(T_WIFI_NOT_SET_UP);
+    console_line(T_WIFI_NOT_SET_UP_DETAIL, value("networks"));
+    console_line(T_WIFI_NOT_SET_UP_ADVICE);
+    verdict(OUT_WARN, R_WIFI_NONE);
+  } else if (state == MDTEST_JOB_DONE) {
     console_blank();
     console_line(T_WIFI_PASS);
+    verdict(OUT_PASS, R_NONE);
   } else if (state == MDTEST_JOB_FAILED) {
     wifiFailure();
   } else {
     console_line(T_JOB_FAILED, MDTEST_TEST_WIFI);
+    verdict(OUT_FAIL, R_NONE);
   }
   if (chscreen_valueIs(text, "networks", "0")) {
     console_line(T_WIFI_NOTHING);
     console_line(T_WIFI_NOTHING_ADVICE);
   }
   if (has("rssi") && atol(value("rssi")) < WIFI_WEAK_DBM) {
+    if (state == MDTEST_JOB_DONE) verdict(OUT_WARN, R_WIFI_WEAK);
     console_line(T_WIFI_WEAK);
     console_line(T_WIFI_WEAK_DETAIL, value("rssi"));
     console_line(T_WIFI_WEAK_ADVICE);
@@ -665,6 +737,7 @@ void devscreen_bluetooth(void) {
   console_blank();
   console_line(T_BT_TITLE);
   console_line(T_BT_STARTING);
+  begin();
   btPhase = MDTEST_BT_PHASE_START;
   int state = chscreen_run(MDTEST_TEST_BLUETOOTH, noParams, BT_POLL_TICKS,
                            btWatch, text);
@@ -687,7 +760,9 @@ void devscreen_bluetooth(void) {
   console_blank();
   if (state == MDTEST_JOB_DONE) {
     console_line(T_BT_PASS);
+    verdict(OUT_PASS, R_NONE);
     if (chscreen_valueIs(text, "devices", "0")) {
+      verdict(OUT_WARN, R_BT_NOTHING);
       console_line(T_BT_NOTHING);
       console_line(T_BT_NOTHING_ADVICE);
     }
@@ -695,17 +770,21 @@ void devscreen_bluetooth(void) {
     console_line(T_BT_CHIP_FAIL);
     console_line(T_BT_CHIP_FAIL_DETAIL, value("chip_error"));
     console_line(T_BT_CHIP_FAIL_ADVICE);
+    verdict(OUT_FAIL, R_CHIP_SILENT);
   } else if (chscreen_valueIs(text, "error", "controller silent") ||
              chscreen_valueIs(text, "error", "controller failed")) {
     console_line(T_BT_START_FAIL);
     console_line(T_BT_START_FAIL_DETAIL, value("error"));
     console_line(T_BT_START_FAIL_ADVICE);
+    verdict(OUT_FAIL, R_BT_START);
   } else if (state == MDTEST_JOB_FAILED) {
     console_line(T_BT_SCAN_FAIL);
     console_line(T_BT_SCAN_FAIL_DETAIL, value("error"),
                  has("scan_error") ? value("scan_error") : "-");
     console_line(T_BT_SCAN_FAIL_ADVICE);
+    verdict(OUT_FAIL, R_BT_SCAN);
   } else {
     console_line(T_JOB_FAILED, MDTEST_TEST_BLUETOOTH);
+    verdict(OUT_FAIL, R_NONE);
   }
 }
