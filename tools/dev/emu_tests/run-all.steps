@@ -29,3 +29,12 @@ say "^\* Everything tested works" 100
 say "^\* SELECT, the LED and the card slot were not tested" 100
 say "^The run took \d+ s" 100
 log "ROM3 is test data again" 500
+# The report holds the run with the device greeted once: the channel's test
+# leaves the channel open for the device tests.
+say "^Press a key" 300
+key s
+say "^Keep the Wi-Fi and Bluetooth names" 300
+key n
+say "^Report saved on the microSD card as MDTEST-REPORT-00.TXT" 1500
+sdfile MDTEST-REPORT-00.TXT "^PASS  The command channel is clean\.\r$"
+sdfilenot MDTEST-REPORT-00.TXT "(?s)The command channel is clean.*The device takes commands"
