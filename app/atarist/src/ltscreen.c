@@ -195,7 +195,6 @@ LtVerdict ltscreen_run(const LtSizes *sizes, unsigned long estimateSeconds) {
   LtVerdict result;
   if (f[0].kind == DG_NONE && f[1].kind == DG_NONE && !stopped) {
     console_line(T_GATE_PASS);
-    console_line(T_GATE_UNLOCKED);
     verdict[0] = MDTEST_VERDICT_PASS;
     result = LT_PASS;
   } else {

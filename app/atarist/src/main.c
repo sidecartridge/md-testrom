@@ -220,9 +220,13 @@ static void giveBackRom3(void) {
   }
 }
 
+/* The device tests need the command channel's test too: the line test
+ * unlocks them only when that one has already passed. */
 static void lineTestPassed(void) {
+  int was = unlocked;
   linePassed = 1;
   unlocked = overridden || (linePassed && channelPassed);
+  if (unlocked && !was) console_line(T_GATE_UNLOCKED);
 }
 
 static void lineTest(int key, const LtSizes *sizes) {
@@ -432,7 +436,8 @@ static void runTests(const LtSizes *sizes) {
   }
   results.outcome[AREA_COMMANDS] = OUT_PASS;
   for (int i = AREA_DEVICE; i < AREA_COUNT; i++) results.outcome[i] = OUT_NOT_RUN;
-  if (!chscreen_open(machine.mch)) {
+  /* The channel's test left it open: opening it again would say hello twice. */
+  if (!cmd_selected() && !chscreen_open(machine.mch)) {
     results.outcome[AREA_DEVICE] = OUT_FAIL;
     results.reason[AREA_DEVICE] = R_LOST;
     return;
