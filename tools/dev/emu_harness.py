@@ -19,7 +19,8 @@ Setups (TOS images linked in emu/tos/, gitignored):
 
 Steps (--step, or --test NAME for tools/dev/emu_tests/NAME.steps):
 
-  wait FRAMES           let FRAMES frames pass (50 a second)
+  wait FRAMES           let FRAMES frames pass (50 a second); "boot" as
+                        FRAMES in any step is the setup's time to boot
   key KEY               press and release a key: one character, or an ST
                         scancode in hex (0x1c is Return)
   say REGEX FRAMES      wait until the program has shown a line matching
@@ -41,6 +42,9 @@ Steps (--step, or --test NAME for tools/dev/emu_tests/NAME.steps):
   floppy NAME REGEX     at the end, with Hatari stopped: the floppy holds
                         the file NAME and its text matches REGEX
   nofloppy NAME         at the end: the floppy has no file NAME
+  sdfile NAME REGEX     at the end: the card's folder holds NAME (a report
+                        the firmware saved) and its text matches REGEX;
+                        sdnofile NAME and sdfilenot NAME REGEX the opposite
 
 A test's lines (or --step values) "@hatari bare", "@monitor mono|vga", "@memsize KB",
 "@layout N" (the program built to read window layout N, to show a version
@@ -48,15 +52,17 @@ mismatch), "@protect on" (the floppy write-protected) and "@fault KIND A B"
 (the firmware serves the window as that faulty bus would, MDTEST_FAULT_* in
 common/mdtest.h), "@debug" (the program's debug build, which can override
 the gate), "@protocol N" (the program built to speak protocol N), "@drop N"
-(every Nth command runs unanswered), "@bench TEXT" (an MDTEST.BNC holding
-TEXT), "@twice" (the program twice in the AUTO folder: quitting the first
-starts it again), "@chipfail" (the radio chip fails to start, as a dead
+(every Nth command runs unanswered), "@bench MODE" (the firmware asks the
+program for bench mode: line, requests or commands), "@twice" (the program
+twice in the AUTO folder), "@chipfail" (the radio chip fails to start, as a dead
 one would), "@cardfault N" (the microSD card fails as CARDTEST_FAULT_N in
 rp/src/include/cardtest.h), "@sdapps" (Booster's apps folder on the card),
 "@wifi HOW" (EmuMD's Wi-Fi: badauth, nonet, fail or off), "@rssi DBM"
 (the signal it reports), "@wifinotsetup" (Booster's Wi-Fi read as not set
 up to join a network), "@btfail" (the Bluetooth controller does not
-start) and "@btnone" (a Bluetooth scan hears nothing) set those options. The card's folder always holds one file of the user's,
+start) and "@btnone" (a Bluetooth scan hears nothing) set those options;
+"@skip SETUP... -- WHY" reports the test as SKIP on those setups, for what
+Hatari cannot show there. The card's folder always holds one file of the user's,
 USER.TXT.
 
 The run folder, tools/dev/logs/emu/<date>-<setup>-<name>/, keeps
@@ -153,17 +159,14 @@ def build_program(layout=None, protocol=None, debug=False):
     return ROOT / "app/atarist" / f"dist{name}" / "MDTEST.TOS"
 
 
-def make_floppy(program, path, bench=None, twice=False):
+def make_floppy(program, path, twice=False):
     folder = Path(tempfile.mkdtemp(prefix="mdtest-floppy-"))
     (folder / "AUTO").mkdir()
     shutil.copy(program, folder / "AUTO" / "MDTEST.PRG")
     if twice:
-        # TOS runs the AUTO folder's programs in turn: quitting the first
-        # starts the second, in the memory the first gave back.
+        # A second copy in the AUTO folder: quitting restarts the computer,
+        # so the first runs again; the second never does.
         shutil.copy(program, folder / "AUTO" / "MDTEST2.PRG")
-    if bench is not None:
-        # The program looks for it in the current folder: the root, from AUTO.
-        (folder / "MDTEST.BNC").write_text(bench + "\r\n")
     subprocess.run([str(DEV / "make_floppy.sh"), str(folder), str(path)], check=True,
                    stdout=subprocess.DEVNULL)
     shutil.rmtree(folder)
@@ -384,6 +387,15 @@ class Run:
     def step_floppynot(self, name, regex):
         self.after.append(("floppynot", name, regex))
 
+    def step_sdfile(self, name, regex):
+        self.after.append(("sdfile", name, regex))
+
+    def step_sdnofile(self, name):
+        self.after.append(("sdnofile", name, None))
+
+    def step_sdfilenot(self, name, regex):
+        self.after.append(("sdfilenot", name, regex))
+
 
 def sd_listing(sd_dir):
     """Every file and folder under the card's folder, with its contents."""
@@ -404,17 +416,20 @@ def check_floppy(checks, files_dir, sd_dir=None, sd_before=None):
             results.append(("sdsame", not changed,
                             f"changed on the card: {', '.join(changed)}" if changed else None))
             continue
-        path = files_dir / name
-        if kind == "nofloppy":
+        on_card = kind.startswith("sd")
+        where = "the card" if on_card else "the floppy"
+        path = (sd_dir if on_card else files_dir) / name
+        if kind in ("nofloppy", "sdnofile"):
             ok = not path.exists()
-            detail = None if ok else f"{name} is on the floppy"
+            detail = None if ok else f"{name} is on {where}"
         elif not path.exists():
-            ok, detail = False, f"no {name} on the floppy"
+            ok, detail = False, f"no {name} on {where}"
         else:
             text = path.read_bytes().decode("ascii", "replace")
             found = re.search(regex, text, re.M) is not None
-            ok = found if kind == "floppy" else not found
-            detail = None if ok else (f"{name} does not match /{regex}/" if kind == "floppy"
+            wanted = kind in ("floppy", "sdfile")
+            ok = found if wanted else not found
+            detail = None if ok else (f"{name} does not match /{regex}/" if wanted
                                       else f"{name} matches /{regex}/")
         results.append((f"{kind} {name}" + (f" {regex}" if regex else ""), ok, detail))
     return results
@@ -422,7 +437,7 @@ def check_floppy(checks, files_dir, sd_dir=None, sd_before=None):
 
 OPTIONS = ("hatari", "monitor", "memsize", "layout", "protect", "fault", "debug",
            "protocol", "drop", "bench", "twice", "chipfail", "cardfault", "sdapps",
-           "wifi", "rssi", "btfail", "btnone", "wifinotsetup")
+           "wifi", "rssi", "btfail", "btnone", "wifinotsetup", "skip")
 
 
 def parse_steps(name, lines, opts):
@@ -482,6 +497,10 @@ def run_one(setup, tests, extra_steps, disk, timeout):
     if not steps:
         raise SystemExit("no steps: --test or --step")
     name = "+".join(tests) or "steps"
+    skip, _, why = opts.get("skip", "").partition(" -- ")
+    if setup in skip.split():
+        print(f"emu_harness: {setup} {name}: SKIP ({why})", flush=True)
+        return "SKIP"
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = DEV / "logs/emu" / f"{stamp}-{setup}-{name}"
     (run_dir / "shots").mkdir(parents=True)
@@ -495,7 +514,7 @@ def run_one(setup, tests, extra_steps, disk, timeout):
         program = build_program(int(layout) if layout else None,
                                 int(protocol) if protocol else None,
                                 "debug" in opts)
-        make_floppy(program, floppy, opts.get("bench"), "twice" in opts)
+        make_floppy(program, floppy, "twice" in opts)
     cmd = hatari_command(setup, opts, run_dir, floppy)
     env = dict(os.environ, HOME=str(run_dir / "home"), SDL_VIDEODRIVER="dummy",
                SDL_AUDIODRIVER="dummy")
@@ -510,6 +529,9 @@ def run_one(setup, tests, extra_steps, disk, timeout):
     env["EMU_CARD_OUT_FILE"] = str(run_dir / "card-out")
     if "wifinotsetup" in opts:
         env["MDTEST_WIFI_NOT_SET_UP"] = "1"
+    if opts.get("bench"):
+        # The firmware asks the program for bench mode in the window's header.
+        env["MDTEST_BENCH"] = opts["bench"].split()[0]
     if "btfail" in opts:
         env["EMU_BT_FAIL"] = "1"
     if "btnone" in opts:
@@ -527,11 +549,13 @@ def run_one(setup, tests, extra_steps, disk, timeout):
     failed = False
     try:
         # The program in the AUTO folder: its title line first.
-        # A monochrome monitor runs at 71 Hz: as many seconds take more frames.
-        boot = SETUPS[setup][4] * (3 if opts.get("monitor") == "mono" else 2) // 2
+        # A monochrome monitor runs at 71 Hz, VGA at 60: as many seconds take
+        # more frames.
+        boot = SETUPS[setup][4] * (3 if opts.get("monitor") in ("mono", "vga") else 2) // 2
         steps = [f"say ^SidecarTridge {boot}"] + steps
         for step in steps:
-            words = shlex.split(step)
+            # "boot" stands for the setup's frames to boot (a restart).
+            words = [str(boot) if w == "boot" else w for w in shlex.split(step)]
             entry = {"step": step}
             try:
                 handler = getattr(run, "step_" + words[0], None)
@@ -572,7 +596,7 @@ def run_one(setup, tests, extra_steps, disk, timeout):
     report["seconds"] = round(time.time() - run.start, 1)
     (run_dir / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(f"emu_harness: {report['result']} in {report['seconds']} s", flush=True)
-    return report["result"] == "PASS"
+    return report["result"]
 
 
 def run_parallel(setups, tests, args):
@@ -595,19 +619,23 @@ def run_parallel(setups, tests, args):
         if args.disk_a:
             cmd += ["--disk-a", args.disk_a]
         done = subprocess.run(cmd, env=env, cwd=ROOT, capture_output=True, text=True)
-        return setup, test, done.returncode == 0, done.stdout + done.stderr
+        out = done.stdout + done.stderr
+        status = "PASS" if done.returncode == 0 else "FAIL"
+        if done.returncode == 0 and f"{setup} {test}: SKIP" in out:
+            status = "SKIP"
+        return setup, test, status, out
 
     start = time.time()
     results = []
     with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
-        for setup, test, ok, out in pool.map(child, pairs):
+        for setup, test, status, out in pool.map(child, pairs):
             print(out, end="", flush=True)
-            results.append((setup, test, ok))
+            results.append((setup, test, status))
     print(f"\nemu_harness summary ({len(results)} runs, {args.jobs} at once, "
           f"{time.time() - start:.0f} s):")
-    for setup, name, ok in results:
-        print(f"  {'PASS' if ok else 'FAIL'}  {setup} {name}")
-    return 0 if all(ok for _, _, ok in results) else 1
+    for setup, name, status in results:
+        print(f"  {status}  {setup} {name}")
+    return 0 if all(status != "FAIL" for _, _, status in results) else 1
 
 
 def main():
@@ -644,9 +672,9 @@ def main():
                             run_one(setup, tests, args.step, args.disk_a, args.timeout)))
     if len(results) > 1:
         print("\nemu_harness summary:")
-        for setup, name, ok in results:
-            print(f"  {'PASS' if ok else 'FAIL'}  {setup} {name}")
-    return 0 if all(ok for _, _, ok in results) else 1
+        for setup, name, status in results:
+            print(f"  {status}  {setup} {name}")
+    return 0 if all(status != "FAIL" for _, _, status in results) else 1
 
 
 if __name__ == "__main__":

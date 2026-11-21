@@ -15,6 +15,7 @@
 
 #include "cardtest.h"
 #include "devtests.h"
+#include "reportsave.h"
 #include "bttest.h"
 #include "wifitest.h"
 
@@ -280,6 +281,7 @@ uint16_t jobs_start(uint16_t test, uint16_t seq, const uint16_t p[4],
   }
   if (test == MDTEST_TEST_WIFI) wifitest_begin(nowMs);
   if (test == MDTEST_TEST_BLUETOOTH) bttest_begin(nowMs);
+  if (test == MDTEST_TEST_REPORT) reportsave_begin(nowMs);
   *number = status.number;
   return MDTEST_STATUS_OK;
 }
@@ -292,6 +294,7 @@ void jobs_cancel(void) {
   }
   if (status.test == MDTEST_TEST_WIFI) wifitest_abort();
   if (status.test == MDTEST_TEST_BLUETOOTH) bttest_abort();
+  if (status.test == MDTEST_TEST_REPORT) reportsave_abort();
   resultLine("cancelled=yes");
   finish(MDTEST_JOB_CANCELLED);
 }
@@ -327,6 +330,11 @@ void jobs_poll(uint32_t nowMs) {
     }
     case MDTEST_TEST_BLUETOOTH: {
       uint16_t state = bttest_step(nowMs, &status.progress, status.live);
+      if (state != MDTEST_JOB_RUNNING) finish(state);
+      break;
+    }
+    case MDTEST_TEST_REPORT: {
+      uint16_t state = reportsave_step(nowMs, &status.progress, status.live);
       if (state != MDTEST_JOB_RUNNING) finish(state);
       break;
     }

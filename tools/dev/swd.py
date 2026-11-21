@@ -2003,7 +2003,7 @@ def build_parser() -> argparse.ArgumentParser:
     lg.set_defaults(func=cmd_log)
 
     rq = sub.add_parser("request", help="the bench's next request to the "
-                        "program (MDTEST.BNC holding 'requests')")
+                        "program (bench mode 2: swd.py app bench 2)")
     rq.add_argument("what", choices=["run", "line_test", "channel_test", "stop"])
     rq.add_argument("words", nargs="*", help="the test, then its parameters")
     rq.add_argument("--elf")

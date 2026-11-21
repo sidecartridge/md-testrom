@@ -24,10 +24,12 @@ CFLAGS := -std=gnu99 -Os -Wall -Werror -Wno-unused-value -I$(LIBCMINI)/include -
 ifeq ($(DEBUG),1)
 CFLAGS += -DMDTEST_DEBUG=1
 endif
+# No crt0: start.s is the entry, and libcmini gives only its plain C
+# (formatting, strings), none of its TOS calls.
 LDFLAGS := -nostdlib -L$(LIBCMINI)/lib -lcmini -lgcc -Wl,--traditional-format -s
 
 SOURCES := $(wildcard $(SRC)/*.c)
-OBJECTS := $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(SOURCES))
+OBJECTS := $(BUILD)/start.o $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(SOURCES))
 HEADERS := $(wildcard $(SRC)/*.h) $(COMMON)/mdtest.h
 
 .PHONY: all clean
@@ -38,8 +40,11 @@ all: $(DIST)/$(EXE)
 $(BUILD)/%.o: $(SRC)/%.c $(HEADERS) version.txt | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/start.o: $(SRC)/start.s | $(BUILD)
+	$(CC) -c $< -o $@
+
 $(DIST)/$(EXE): $(OBJECTS) | $(DIST)
-	$(CC) $(LIBCMINI)/lib/crt0.o $(OBJECTS) -o $@ $(LDFLAGS)
+	$(CC) $(OBJECTS) -o $@ $(LDFLAGS)
 
 $(BUILD) $(DIST):
 	mkdir -p $@

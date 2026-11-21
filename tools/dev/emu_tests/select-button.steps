@@ -16,5 +16,7 @@ say "^  pressed for [3-5]\d\d ms" 100
 log "SELECT pressed during its test: reported, not acted on" 100
 nosay "^WARN  Release SELECT"
 sayn 3 "^Press a key" 500
+# Past the 500 ms after the test in which a press is still the test's.
+wait 50
 select 100
 log "SELECT pressed: jumping to the booster app" 500

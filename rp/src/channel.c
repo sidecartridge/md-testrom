@@ -14,6 +14,7 @@
 #include "commemul.h"
 #include "debug.h"
 #include "jobs.h"
+#include "reportsave.h"
 #include "mdtest.h"
 #include "pico/stdlib.h"
 #include "tprotocol.h"
@@ -309,6 +310,23 @@ static void onCommand(TransmissionProtocol *frame, uint16_t *words) {
     case MDTEST_CMD_COUNTERS:
       counters();
       break;
+    case MDTEST_CMD_REPORT_DATA: {
+      const JobStatus *job = jobs_status();
+      if (count < 2U || words[1] > (count - 2U) * 2U ||
+          job->test != MDTEST_TEST_REPORT || job->state != MDTEST_JOB_RUNNING) {
+        answer(command, MDTEST_STATUS_BAD, 0, NULL, 0);
+        break;
+      }
+      // A resend of a chunk already taken is answered again and changes
+      // nothing; a new one waits until the last is written.
+      if (words[0] != lastSeq && !reportsave_ready(words[1])) {
+        answer(command, MDTEST_STATUS_BUSY, 0, NULL, 0);
+        break;
+      }
+      if (newSeq(words[0])) reportsave_take(&words[2], words[1]);
+      answer(command, MDTEST_STATUS_OK, 0, NULL, 0);
+      break;
+    }
     case MDTEST_CMD_EXIT:
       answer(command, MDTEST_STATUS_OK, 0, NULL, 0);
       jobs_cancel();

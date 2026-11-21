@@ -2,10 +2,11 @@
  * MDTEST.TOS: tests a SidecarTridge Multi-device from the Atari.
  *
  * It identifies the machine, recognises what is in the cartridge port from
- * plain reads of the window (common/mdtest.h), and shows the tests. Text
- * only, over GEMDOS and BIOS: any resolution, any machine, the AUTO folder.
+ * plain reads of the window (common/mdtest.h), and shows the tests. It runs
+ * without TOS once started (hw.c): its own screen, keyboard and clock, 80
+ * columns on every machine; quitting restarts the computer, so it does not
+ * belong in the AUTO folder.
  */
-#include <mint/osbind.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -15,6 +16,7 @@
 #include "devscreen.h"
 #include "device.h"
 #include "ltscreen.h"
+#include "hw.h"
 #include "machine.h"
 #include "mdtest.h"
 #include "report.h"
@@ -38,7 +40,33 @@ static int unlocked;
 static int overridden;
 
 #define MSTE_SPEED_CACHE (*(volatile unsigned char *)0xFF8E21)
-#define BENCH_FILE "MDTEST.BNC"
+#define KEY_ESC 27
+#define KEY_RETURN 13
+#define MENU_RESULT_COLUMN 50
+
+/* Each test's last result, beside it in the menu: by its key. */
+static const char *lastResult[26];
+
+static void setResult(int key, const char *result) {
+  if (key >= 'a' && key <= 'z') lastResult[key - 'a'] = result;
+}
+
+static const char *outcomeWord(Outcome o) {
+  switch (o) {
+    case OUT_PASS:
+      return T_OUT_PASS;
+    case OUT_WARN:
+      return T_OUT_WARN;
+    case OUT_FAIL:
+      return T_OUT_FAIL;
+    case OUT_SKIP:
+      return T_OUT_SKIP;
+    case OUT_STOPPED:
+      return T_OUT_STOPPED;
+    default:
+      return 0;
+  }
+}
 
 static void showMachine(void) {
   char cpu[8];
@@ -47,11 +75,10 @@ static void showMachine(void) {
                machine.tos & 0xFF);
   console_line(T_MACHINE_DETAIL, (unsigned)(machine.tosDate & 0xFFFF),
                (unsigned)(machine.tosDate >> 24),
-               (unsigned)((machine.tosDate >> 16) & 0xFF),
-               machine.gemdos & 0xFF, machine.gemdos >> 8);
+               (unsigned)((machine.tosDate >> 16) & 0xFF));
   console_line(T_MACHINE_SCREEN, machine_screen(&machine),
                machine.mch == -1 ? T_NO_COOKIE_JAR : "");
-  console_line(T_MACHINE_RAM, machine.stRam / 1024, machine.freeRam / 1024);
+  console_line(T_MACHINE_RAM, machine.stRam / 1024);
   if (machine.ttRam) console_line(T_MACHINE_TTRAM, machine.ttRam / 1024);
   if (machine_isMegaSte(&machine)) {
     console_line(T_MACHINE_MSTE, machine.msteFast ? "16" : "8",
@@ -109,39 +136,80 @@ static int showDevice(void) {
   return 1;
 }
 
-static void showMenu(int lineTestReady) {
-  console_blank();
+/* The menu's entries, in order: each with its key (0 for a line that is not
+ * a test). */
+typedef struct {
+  int key;
+  const char *text;
+} MenuEntry;
+
+static int menuEntries(int lineTestReady, MenuEntry *e) {
+  int n = 0;
   if (lineTestReady) {
-    console_line(T_MENU_RUN_ALL);
-    console_line(T_MENU_LINE);
-    console_line(T_MENU_LINE_LONG);
-    if (machine_isMegaSte(&machine)) console_line(T_MENU_LINE_MSTE);
+    e[n++] = (MenuEntry){'a', T_MENU_RUN_ALL};
+    e[n++] = (MenuEntry){'l', T_MENU_LINE};
+    e[n++] = (MenuEntry){'k', T_MENU_LINE_LONG};
+    if (machine_isMegaSte(&machine)) e[n++] = (MenuEntry){'m', T_MENU_LINE_MSTE};
   } else {
-    console_line(T_MENU_LINE_OFF);
+    e[n++] = (MenuEntry){0, T_MENU_LINE_OFF};
   }
-  if (linePassed || overridden) console_line(T_MENU_CHANNEL);
+  if (linePassed || overridden) e[n++] = (MenuEntry){'c', T_MENU_CHANNEL};
   if (unlocked) {
-    console_line(T_MENU_INFO);
-    console_line(T_MENU_SELECT);
-    console_line(T_MENU_LED);
-    console_line(T_MENU_CARD);
-    console_line(T_MENU_CARD_SWAP);
-    console_line(T_MENU_WIFI);
-    console_line(T_MENU_BT);
+    e[n++] = (MenuEntry){'i', T_MENU_INFO};
+    e[n++] = (MenuEntry){'p', T_MENU_SELECT};
+    e[n++] = (MenuEntry){'g', T_MENU_LED};
+    e[n++] = (MenuEntry){'d', T_MENU_CARD};
+    e[n++] = (MenuEntry){'r', T_MENU_CARD_SWAP};
+    e[n++] = (MenuEntry){'w', T_MENU_WIFI};
+    e[n++] = (MenuEntry){'t', T_MENU_BT};
   } else if (linePassed) {
-    console_line(T_MENU_LOCKED1);
-    console_line(T_MENU_CHANNEL_NEXT);
+    e[n++] = (MenuEntry){0, T_MENU_LOCKED1};
+    e[n++] = (MenuEntry){0, T_MENU_CHANNEL_NEXT};
   } else {
-    console_line(T_MENU_LOCKED1);
-    console_line(T_MENU_LOCKED2);
+    e[n++] = (MenuEntry){0, T_MENU_LOCKED1};
+    e[n++] = (MenuEntry){0, T_MENU_LOCKED2};
   }
 #ifdef MDTEST_DEBUG
-  if (!unlocked) console_line(T_MENU_OVERRIDE);
+  if (!unlocked) e[n++] = (MenuEntry){'o', T_MENU_OVERRIDE};
 #endif
-  if (device.kind == DEVICE_TEST) console_line(T_MENU_EXIT);
-  console_line(T_MENU_SAVE);
-  console_line(T_MENU_QUIT);
-  console_line(T_MENU_PROMPT);
+  if (device.kind == DEVICE_TEST) e[n++] = (MenuEntry){'b', T_MENU_EXIT};
+  e[n++] = (MenuEntry){'s', T_MENU_SAVE};
+  e[n++] = (MenuEntry){'q', T_MENU_QUIT};
+  return n;
+}
+
+/* The menu as a panel: the body cleared, each entry with its test's last
+ * result. Screen only. */
+static void drawMenu(int lineTestReady) {
+  MenuEntry e[24];
+  int n = menuEntries(lineTestReady, e);
+  char title[48];
+  snprintf(title, sizeof(title), T_TITLE, VERSION);
+  console_screen(title, 0);
+  for (int i = 0; i < n; i++) {
+    int row = console_bodyRow();
+    console_at(2, row, e[i].text);
+    const char *result = e[i].key ? lastResult[e[i].key - 'a'] : 0;
+    if (result) console_at(MENU_RESULT_COLUMN, row, result);
+    console_bodyFrom(row + 1);
+  }
+  console_status(T_MENU_PROMPT, T_MENU_STATUS_RIGHT);
+}
+
+/* The menu's lines for the report and the host's log, as every earlier
+ * version wrote them; drawn as the panel only when asked (at the start, and
+ * on Space), so a test's results stay on the screen until then. */
+static void showMenu(int lineTestReady, int draw) {
+  MenuEntry e[24];
+  int n = menuEntries(lineTestReady, e);
+  console_record("");
+  for (int i = 0; i < n; i++) console_record("%s", e[i].text);
+  console_record(T_MENU_PROMPT);
+  if (draw) {
+    drawMenu(lineTestReady);
+  } else {
+    console_status(T_MENU_AFTER_TEST, T_MENU_STATUS_RIGHT);
+  }
 }
 
 /* ROM3 as data again before any read of it: the mirror stops with it. */
@@ -157,16 +225,21 @@ static void lineTestPassed(void) {
   unlocked = overridden || (linePassed && channelPassed);
 }
 
-static void lineTest(const LtSizes *sizes) {
+static void lineTest(int key, const LtSizes *sizes) {
   giveBackRom3();
-  if (ltscreen_run(sizes, ltscreen_estimate(sizes)) == LT_PASS) {
-    lineTestPassed();
-  }
+  LtVerdict v = ltscreen_run(sizes, ltscreen_estimate(sizes));
+  setResult(key, v == LT_PASS     ? T_OUT_PASS
+                 : v == LT_FAIL   ? T_OUT_FAIL
+                                  : T_OUT_STOPPED);
+  if (v == LT_PASS) lineTestPassed();
 }
 
 static void channelTest(void) {
   ChVerdict v = chscreen_test(machine.mch);
   channelPassed = v == CH_CLEAN || v == CH_RETRIES;
+  setResult('c', v == CH_CLEAN     ? T_OUT_PASS
+                 : v == CH_RETRIES ? T_OUT_WARN
+                                   : T_OUT_FAIL);
   unlocked = overridden || (linePassed && channelPassed);
   if (channelPassed && unlocked) console_line(T_GATE_UNLOCKED);
 }
@@ -187,32 +260,15 @@ static void lineTestMegaSte(void) {
     }
   }
   MSTE_SPEED_CACHE = saved;
+  setResult('m', passes == 3 ? T_OUT_PASS : T_OUT_FAIL);
   if (passes == 3) lineTestPassed();
-}
-
-/* What MDTEST.BNC asks for: its first word. */
-#define BENCH_LINE 1     /* anything else: the line test in a loop */
-#define BENCH_REQUESTS 2 /* "requests": the line test, then the RP's requests */
-#define BENCH_COMMANDS 3 /* "commands", debug builds: the requests at once */
-
-static int benchFile(void) {
-  char text[16] = {0};
-  long handle = Fopen(BENCH_FILE, 0);
-  if (handle < 0) return 0;
-  long n = Fread((short)handle, sizeof(text) - 1, text);
-  Fclose((short)handle);
-  if (n > 0 && strncmp(text, "requests", 8) == 0) return BENCH_REQUESTS;
-#ifdef MDTEST_DEBUG
-  if (n > 0 && strncmp(text, "commands", 8) == 0) return BENCH_COMMANDS;
-#endif
-  return BENCH_LINE;
 }
 
 static int keyPressed(void) { return console_keyPressed(); }
 
 static void waitTicks(unsigned long ticks) {
-  unsigned long start = *(volatile unsigned long *)0x4BA;
-  while (*(volatile unsigned long *)0x4BA - start < ticks) {
+  unsigned long start = hw_ticks;
+  while (hw_ticks - start < ticks) {
   }
 }
 
@@ -222,8 +278,8 @@ static void waitTicks(unsigned long ticks) {
 #define REOPEN_TICKS (200UL * 10)
 
 static int reopen(void) {
-  unsigned long start = *(volatile unsigned long *)0x4BA;
-  while (*(volatile unsigned long *)0x4BA - start < REOPEN_TICKS) {
+  unsigned long start = hw_ticks;
+  while (hw_ticks - start < REOPEN_TICKS) {
     if (cmd_select() == CMD_OK) break;
   }
   return chscreen_open(machine.mch);
@@ -260,12 +316,16 @@ static void benchRequests(void) {
   giveBackRom3();
 }
 
-/* Bench mode, selected by MDTEST.BNC next to the program: the line test in a
- * loop, each verdict sent to the RP, until a key; or the RP's requests. */
+/* Bench mode, asked for in the window's header (a debug or EmuMD firmware):
+ * the line test in a loop, each verdict sent to the RP, until a key; or the
+ * RP's requests. */
 static int benchMode(void) {
-  int mode = benchFile();
-  if (!mode) return 0;
-  if (mode == BENCH_COMMANDS) {
+  int mode = device.bench;
+  if (mode == MDTEST_BENCH_NONE || mode > MDTEST_BENCH_COMMANDS) return 0;
+#ifndef MDTEST_DEBUG
+  if (mode == MDTEST_BENCH_COMMANDS) mode = MDTEST_BENCH_LINE;
+#endif
+  if (mode == MDTEST_BENCH_COMMANDS) {
     console_line(T_BENCH_SKIP);
     benchRequests();
     return 1;
@@ -274,7 +334,7 @@ static int benchMode(void) {
   for (unsigned long run = 1; !keyPressed(); run++) {
     console_line(T_BENCH_RUN, run);
     LtVerdict v = ltscreen_run(&lt_quick, ltscreen_estimate(&lt_quick));
-    if (mode == BENCH_REQUESTS && v == LT_PASS) {
+    if (mode == MDTEST_BENCH_REQUESTS && v == LT_PASS) {
       benchRequests();
       return 1;
     }
@@ -287,13 +347,21 @@ static int benchMode(void) {
  * that need the user only if they say so; then the summary. A key between
  * two tests (or during the line test) stops it with what it has. */
 #define RUN_DEVICE_SECONDS 40UL /* the channel's test and the device tests: 38 s on a Mega ST */
-#define HZ_200 (*(volatile unsigned long *)0x4BA)
-#define KEY_ESC 27
+#define HZ_200 hw_ticks
 
 static Results results;
 
+/* The summary as a panel of its own: its title starts a new screen. */
 static void putSummary(const char *line, void *ctx) {
-  (void)ctx;
+  int *started = ctx;
+  if (!*started) {
+    if (line[0] == '\0') return; /* the blank before the title */
+    if (!strcmp(line, T_SUM_TITLE)) {
+      console_page(T_SUM_TITLE);
+      *started = 1;
+      return;
+    }
+  }
   console_line("%s", line);
 }
 
@@ -306,8 +374,11 @@ static int stoppedAt(Area area) {
 }
 
 static void runDevice(Area area, void (*test)(void)) {
+  static const char areaKeys[AREA_COUNT] = {'l', 'c', 'i', 'd', 'w',
+                                            't', 'p', 'g', 'r'};
   test();
   devscreen_verdict(&results.outcome[area], &results.reason[area]);
+  setResult(areaKeys[area], outcomeWord(results.outcome[area]));
 }
 
 /* A test the silent radio chip makes meaningless: said once, skipped. */
@@ -344,6 +415,7 @@ static void runTests(const LtSizes *sizes) {
       return;
     }
     results.outcome[AREA_LINES] = OUT_PASS;
+    setResult('l', T_OUT_PASS);
     lineTestPassed();
   }
   if (stoppedAt(AREA_COMMANDS)) return;
@@ -396,8 +468,7 @@ static void runTests(const LtSizes *sizes) {
 static void runAll(void) {
   unsigned long quick = ltscreen_estimate(&lt_quick) + RUN_DEVICE_SECONDS;
   unsigned long thorough = ltscreen_estimate(&lt_long) + RUN_DEVICE_SECONDS;
-  console_blank();
-  console_line(T_RUN_TITLE);
+  console_page(T_RUN_TITLE);
   console_line(T_RUN_CHOOSE, (quick + 59) / 60, (thorough + 59) / 60);
   int key;
   do {
@@ -405,53 +476,87 @@ static void runAll(void) {
   } while (key != 'q' && key != 't' && key != KEY_ESC);
   if (key == KEY_ESC) return;
   console_line(T_RUN_STOP_HINT);
+  console_status(T_RUN_STOP_HINT, 0);
   unsigned long start = HZ_200;
   summary_clear(&results);
   runTests(key == 't' ? &lt_long : &lt_quick);
   giveBackRom3();
-  summary_write(&results, putSummary, 0);
+  int started = 0;
+  summary_write(&results, putSummary, &started);
   console_line(T_RUN_TOOK, (HZ_200 - start) / 200);
 }
 
+/* Quit: the computer restarts (nothing of TOS is left to return to). Asked
+ * once more on the bottom line, so a stray Q does not lose the session. */
+static int confirmQuit(void) {
+  console_status(T_QUIT_CONFIRM, 0);
+  return console_key() == 'q';
+}
+
+static void restart(int giveBack) {
+  if (giveBack) giveBackRom3();
+  console_record(T_QUIT_RESTART);
+  console_status(T_QUIT_RESTART, 0);
+  hw_restart();
+}
+
 static void run(void) {
+  char machineText[48];
+  char cpu[8];
   console_init();
-  console_clear();
+  sprintf(cpu, T_CPU, (int)machine.cpu);
+  snprintf(machineText, sizeof(machineText), T_TITLE_MACHINE,
+           machine_name(&machine), cpu, machine.tos >> 8, machine.tos & 0xFF);
+  console_setMachine(machineText);
+  char title[48];
+  snprintf(title, sizeof(title), T_TITLE, VERSION);
+  console_title(title, machineText);
   console_line(T_TITLE, VERSION);
-  machine_identify(&machine);
   showMachine();
   cmd_init(machine.mch, machine_isMegaSte(&machine));
   device_recognise(&device);
   int ready = showDevice();
-  if (ready && benchMode()) {
-    Cconws("\033e");
-    return;
+  if (device.kind == DEVICE_TEST) {
+    char text[80];
+    snprintf(text, sizeof(text), T_DEVICE_BAR, device.version, device.build);
+    console_device(text);
   }
-  showMenu(ready);
+  if (ready && benchMode()) return;
+  /* The menu's panel at once when the test firmware answers as expected;
+   * otherwise what was found stays on the screen, the menu a key away. */
+  showMenu(ready, device.kind == DEVICE_TEST &&
+                      device.layout == PROGRAM_LAYOUT_VERSION);
 
   for (;;) {
     int key = console_key();
-    if (key == 'q') break;
+    if (key == 'q') {
+      if (confirmQuit()) restart(1);
+      showMenu(ready, 0);
+      continue;
+    }
+    if (key == ' ' || key == KEY_RETURN) {
+      drawMenu(ready);
+      continue;
+    }
     if (key == 's') {
       report_save(overridden ? T_REPORT_GATE_OVERRIDDEN
                   : unlocked ? T_REPORT_GATE_PASSED
                   : linePassed ? T_REPORT_GATE_CHANNEL
-                               : T_REPORT_GATE_LOCKED);
+                               : T_REPORT_GATE_LOCKED,
+                  unlocked, machine.mch);
       console_line(T_MENU_PROMPT);
       continue;
     }
     if (ready && key == 'a') {
       runAll();
-    } else if (ready && key == 'l') {
-      lineTest(&lt_quick);
-    } else if (ready && key == 'k') {
-      lineTest(&lt_long);
+    } else if (ready && (key == 'l' || key == 'k')) {
+      lineTest(key, key == 'l' ? &lt_quick : &lt_long);
     } else if (ready && key == 'm' && machine_isMegaSte(&machine)) {
       lineTestMegaSte();
     } else if (key == 'c' && (linePassed || overridden)) {
       channelTest();
     } else if (unlocked && (key == 'i' || key == 'p' || key == 'g' ||
                             key == 'd' || key == 'r' || key == 'w' || key == 't')) {
-      console_blank();
       if (chscreen_open(machine.mch)) {
         if (key == 'i') devscreen_info();
         if (key == 'p') devscreen_select();
@@ -460,14 +565,17 @@ static void run(void) {
         if (key == 'r') devscreen_cardSwap();
         if (key == 'w') devscreen_wifi();
         if (key == 't') devscreen_bluetooth();
+        Outcome o;
+        Reason r;
+        devscreen_verdict(&o, &r);
+        setResult(key, outcomeWord(o));
       }
     } else if (key == 'b' && device.kind == DEVICE_TEST) {
       if (devscreen_exit(machine.mch)) {
-        /* The cartridge port is Booster's: quit without reading it. */
+        /* The cartridge port is Booster's: nothing reads it again. */
         console_line(T_EXIT_QUIT);
         (void)console_key();
-        Cconws("\033e");
-        return;
+        restart(0);
       }
 #ifdef MDTEST_DEBUG
     } else if (key == 'o' && !unlocked) {
@@ -478,17 +586,15 @@ static void run(void) {
     } else {
       continue;
     }
-    showMenu(ready);
+    showMenu(ready, 0);
   }
-  giveBackRom3();
-  Cconws("\033e");
 }
 
+/* From start.s, in supervisor mode on the program's own stack. */
 int main(void) {
-  /* Supervisor mode on the program's own stack: the window, the cookie jar
-   * and the system variables are read directly. */
-  long ssp = Super(0L);
+  machine_identify(&machine); /* what TOS left in RAM, read once */
+  hw_takeOver(&machine);      /* from here on, no TOS */
   run();
-  Super(ssp);
+  restart(1);
   return 0;
 }

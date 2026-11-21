@@ -109,6 +109,25 @@ uint16_t bttest_step(uint32_t nowMs, uint16_t *progress,
 
 void bttest_abort(void) { btAborts++; }
 
+// The report on the card, the same way (reportsave.c runs under EmuMD).
+static int reportBegun;
+
+void reportsave_begin(uint32_t nowMs) {
+  (void)nowMs;
+  reportBegun++;
+}
+
+uint16_t reportsave_step(uint32_t nowMs, uint16_t *progress,
+                         uint16_t live[MDTEST_JOB_LIVE_WORDS]) {
+  (void)nowMs;
+  (void)live;
+  *progress = 100;
+  jobs_resultLine("file=MDTEST-REPORT-00.TXT");
+  return MDTEST_JOB_DONE;
+}
+
+void reportsave_abort(void) {}
+
 static int resultHas(const char *line) {
   const JobStatus *s = jobs_status();
   size_t n = strlen(line);

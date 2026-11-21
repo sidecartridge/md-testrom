@@ -5,4 +5,4 @@ key x
 key b
 say "^The device is restarting into Booster" 500
 log "The ST asked: jumping to the booster app" 500
-say "^Press a key to quit" 100
+say "^Press a key to restart the computer into Booster" 100

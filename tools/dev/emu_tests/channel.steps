@@ -18,4 +18,5 @@ say "^PASS  The command channel is clean" 100
 log "ST\| PASS  The command channel is clean" 100
 log "ST\| Press a key" 500
 key q
+key q
 log "ROM3 is test data again" 500

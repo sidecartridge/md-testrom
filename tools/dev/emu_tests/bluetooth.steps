@@ -22,6 +22,6 @@ sayn 3 "^Press a key" 300
 key s
 say "^Keep the Wi-Fi and Bluetooth names heard in the report" 100
 key n
-say "^Report saved as REPORT00.TXT" 500
-floppy REPORT00.TXT "^   -58 dBm classic E0:4D:44:45:4D:01 \(name left out\)\r$"
-floppynot REPORT00.TXT "EmuMD Phone|EmuMD Tag"
+say "^Report saved on the microSD card as MDTEST-REPORT-00.TXT" 1500
+sdfile MDTEST-REPORT-00.TXT "^   -58 dBm classic E0:4D:44:45:4D:01 \(name left out\)\r$"
+sdfilenot MDTEST-REPORT-00.TXT "EmuMD Phone|EmuMD Tag"

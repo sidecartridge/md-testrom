@@ -52,8 +52,8 @@ EmuMD's own `reset.h` (no ARM code) ahead of the firmware's.
   window as on the device. Selecting ROM3 as the command channel, its
   commands and unselecting it all work here (they go through the ring and
   answer in ROM4); since the line test cannot pass, the tests reach them
-  through the program's debug build: its gate override, or the bench with
-  `MDTEST.BNC` holding `commands`.
+  through the program's debug build: its gate override, or the bench
+  (`MDTEST_BENCH=commands`, the harness's `@bench commands`).
 - **Answer timing.** The firmware's main loop runs on a host thread beside
   the emulator, so an answer now and then comes later than on the device.
 - PIO, DMA and bus timing; the SELECT button and the LED; the real card and

@@ -1,10 +1,10 @@
 #include "chscreen.h"
 
-#include <mint/osbind.h>
 #include <string.h>
 
 #include "commands.h"
 #include "console.h"
+#include "hw.h"
 #include "mdtest.h"
 #include "texts.h"
 
@@ -14,7 +14,7 @@
 #define PROGRAM_PROTOCOL_VERSION MDTEST_PROTOCOL_VERSION
 #endif
 
-#define HZ_200 (*(volatile unsigned long *)0x4BA)
+#define HZ_200 hw_ticks
 
 #define HELLO_BURST 500UL
 #define ECHO_ROUNDS 10000UL
@@ -250,8 +250,7 @@ int chscreen_job(unsigned short test, const unsigned short params[4]) {
 }
 
 ChVerdict chscreen_test(long mch) {
-  console_blank();
-  console_line(T_CH_TITLE);
+  console_page(T_CH_TITLE);
   bootSeen = 0;
   restarted = 0;
   wrongAnswers = 0;

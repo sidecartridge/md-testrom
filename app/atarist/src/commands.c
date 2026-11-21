@@ -2,8 +2,10 @@
 
 #include <string.h>
 
+#include "hw.h"
+
 #define WINDOW ((const volatile unsigned short *)MDTEST_ROM4_ADDRESS)
-#define HZ_200 (*(volatile unsigned long *)0x4BA)
+#define HZ_200 hw_ticks
 #define MSTE_SPEED_CACHE (*(volatile unsigned char *)0xFF8E21)
 
 /* The template's block: the token the firmware echoes, then its seed. */
@@ -177,6 +179,19 @@ void cmd_log(const char *line) {
     stats.logsDropped++;
   }
   logging = 0;
+}
+
+int cmd_reportData(const char *bytes, unsigned short length, CmdAnswer *a) {
+  static unsigned short words[2 + MDTEST_REPORT_CHUNK_BYTES / 2];
+  if (length > MDTEST_REPORT_CHUNK_BYTES) length = MDTEST_REPORT_CHUNK_BYTES;
+  words[0] = servedSeq();
+  words[1] = length;
+  for (unsigned short i = 0; i < length; i += 2) {
+    unsigned short high = (unsigned char)bytes[i];
+    unsigned short low = (i + 1 < length) ? (unsigned char)bytes[i + 1] : 0;
+    words[2 + i / 2] = (unsigned short)((high << 8) | low);
+  }
+  return cmd_send(MDTEST_CMD_REPORT_DATA, words, 2 + (length + 1) / 2, a);
 }
 
 int cmd_request(CmdAnswer *a) {

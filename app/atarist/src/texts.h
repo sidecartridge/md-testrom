@@ -6,17 +6,20 @@
  *   words what was found; no register names, addresses or jargon on it.
  * - The technical detail goes on the line below, indented, for support.
  * - Advice says what to do next, as an instruction ("Update the firmware").
- * - Lines fit in 40 columns where they can: low resolution shows 40.
+ * - The screen is 80 columns on every machine (the program sets medium or
+ *   high resolution itself); a longer line wraps under its own indentation.
  */
 #ifndef TEXTS_H
 #define TEXTS_H
 
 #define T_TITLE "SidecarTridge Multi-device Test %s"
+#define T_TITLE_MACHINE "%s  %s  TOS %x.%02x"
+#define T_DEVICE_BAR "Device   test firmware %s, build %s"
 #define T_MACHINE "Machine: %s, %s, TOS %x.%02x"
-#define T_MACHINE_DETAIL "  TOS date %04x-%02x-%02x, GEMDOS %x.%02x"
+#define T_MACHINE_DETAIL "  TOS date %04x-%02x-%02x"
 #define T_MACHINE_SCREEN "  %s%s"
 #define T_NO_COOKIE_JAR ", no cookie jar"
-#define T_MACHINE_RAM "  RAM %lu KB, free %lu KB"
+#define T_MACHINE_RAM "  RAM %lu KB"
 #define T_MACHINE_TTRAM "  TT-RAM %lu KB"
 #define T_MACHINE_MSTE "  Mega STE at %s MHz, cache %s"
 #define T_CPU "680%02d"
@@ -61,8 +64,13 @@
 #define T_MENU_LOCKED1 "    Wi-Fi, microSD, Bluetooth, SELECT"
 #define T_MENU_LOCKED2 "    and LED: after the line test"
 #define T_MENU_SAVE "[S] Save report"
-#define T_MENU_QUIT "[Q] Quit"
+#define T_MENU_QUIT "[Q] Quit: restarts the computer"
 #define T_MENU_PROMPT "Press a key."
+#define T_MENU_STATUS_RIGHT "Space: the menu"
+#define T_MENU_AFTER_TEST "Press a test's key, or Space for the menu."
+#define T_QUIT_CONFIRM \
+  "Q again restarts the computer; any other key stays in the program."
+#define T_QUIT_RESTART "Restarting the computer..."
 
 #define T_LINE_TITLE "Line test: address, data and selects"
 #define T_LINE_QUICK "Quick pass: about %lu s. Any key stops it."
@@ -72,6 +80,11 @@
 #define T_LINE_ROW_ERRORS "%-16s %s FAIL %lu errors"
 #define T_LINE_ROW_NOTIME "%-16s %s PASS"
 #define T_LINE_ROW_STOPPED "%-16s %s stopped"
+#define T_LINE_STATUS "Any key stops the line test."
+#define T_LINE_HEAD_TEST "Test"
+#define T_LINE_CELL_RUNNING "reading..."
+#define T_LINE_CELL_PASS "PASS  %3lu.%lu s"
+#define T_LINE_CELL_ERRORS "FAIL  %lu errors"
 #define T_BANK_ROM4 "ROM4"
 #define T_BANK_ROM3 "ROM3"
 #define T_BOTH_BANKS "both banks"
@@ -145,11 +158,19 @@
 #define T_BENCH_STOP "Bench mode: stopped by the RP."
 #define T_BENCH_SKIP "WARN  Line test skipped (debug bench)."
 
-#define T_SAVED "Report saved as %s."
+#define T_SAVING "Saving the report on the microSD card..."
+#define T_SAVED "Report saved on the microSD card as %s."
 #define T_SAVE_FAILED "WARN  The report could not be saved."
-#define T_SAVE_FAILED_DETAIL "  %s: GEMDOS error %ld"
-#define T_SAVE_ADVICE "Check the disk is not write-protected or full."
-#define T_SAVE_NONAME "  no free name REPORT00.TXT to REPORT99.TXT"
+#define T_SAVE_FAILED_DETAIL "  %s"
+#define T_SAVE_ADVICE \
+  "Check a microSD card is in the device and has room, or photograph the " \
+  "screen for support."
+#define T_SAVE_LOCKED "WARN  The report cannot be saved yet."
+#define T_SAVE_LOCKED_DETAIL \
+  "  it is written on the microSD card over the command channel, which " \
+  "opens once the line test and the channel's test pass"
+#define T_SAVE_LOCKED_ADVICE "Photograph the screen for support."
+#define T_SAVE_NO_DEVICE "  the device stopped answering"
 #define T_SAVE_ASK_NAMES \
   "Keep the Wi-Fi and Bluetooth names heard in the report? [Y/N]"
 #define T_SAVE_NAMES_KEPT "  names kept"
@@ -617,6 +638,6 @@
   "Reset the computer, or switch it off and on, to use Booster."
 #define T_EXIT_FAIL "FAIL  The device did not answer."
 #define T_EXIT_FAIL_ADVICE "Press SELECT on the device to go back to Booster."
-#define T_EXIT_QUIT "Press a key to quit."
+#define T_EXIT_QUIT "Press a key to restart the computer into Booster."
 
 #endif

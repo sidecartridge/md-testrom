@@ -67,6 +67,7 @@ void device_recognise(Device *d) {
     d->kind = DEVICE_TEST;
     d->layout = h[MDTEST_HDR_LAYOUT];
     d->state = h[MDTEST_HDR_STATE];
+    d->bench = h[MDTEST_HDR_BENCH];
     text(d->version, &h[MDTEST_HDR_VERSION], MDTEST_HDR_VERSION_WORDS);
     text(d->build, &h[MDTEST_HDR_BUILD], MDTEST_HDR_BUILD_WORDS);
     return;

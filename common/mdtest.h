@@ -40,7 +40,7 @@
 #define MDTEST_HDR_LAYOUT 4U        // MDTEST_LAYOUT_VERSION
 #define MDTEST_HDR_STATE 5U         // MDTEST_STATE_*
 #define MDTEST_HDR_CHECKSUM 6U      // the header's words sum to 0 (mod 2^16)
-#define MDTEST_HDR_RESERVED 7U      // 0
+#define MDTEST_HDR_BENCH 7U         // MDTEST_BENCH_* (0 in v1 firmware)
 #define MDTEST_HDR_VERSION 8U       // 8 words: the firmware's version
 #define MDTEST_HDR_VERSION_WORDS 8U
 #define MDTEST_HDR_BUILD 16U        // 16 words: the firmware's build ID
@@ -163,6 +163,12 @@
 // (a running job is cancelled first). The ST then reads Booster's cartridge,
 // not this window: the program asks the user to reset it.
 #define MDTEST_CMD_EXIT ((MDTEST_APP_ID << 8) | 0x0CU)
+// Words: the sequence number (MDTEST_ANS_SEQ), the length in bytes (at most
+// MDTEST_REPORT_CHUNK_BYTES; 0 ends the report), then the text, two
+// characters a word. Taken while the report job is ready: MDTEST_STATUS_BUSY
+// while the last chunk is still being written (send it again), BAD with no
+// report job. Like LOG, a resend after a lost answer is taken once.
+#define MDTEST_CMD_REPORT_DATA ((MDTEST_APP_ID << 8) | 0x0DU)
 
 // The answer record, at $FA2100 (after the template's block): every app
 // command's answer, written before its token.
@@ -195,10 +201,12 @@
 #define MDTEST_CAP_SD_SWAP 0x00000040UL
 #define MDTEST_CAP_WIFI 0x00000080UL
 #define MDTEST_CAP_BLUETOOTH 0x00000100UL
+#define MDTEST_CAP_REPORT 0x00000200UL
 #define MDTEST_CAPS                                                     \
   (MDTEST_CAP_DUMMY | MDTEST_CAP_DEVICE_INFO | MDTEST_CAP_SELECT |      \
    MDTEST_CAP_LED | MDTEST_CAP_EXIT | MDTEST_CAP_SD_CARD |              \
-   MDTEST_CAP_SD_SWAP | MDTEST_CAP_WIFI | MDTEST_CAP_BLUETOOTH)
+   MDTEST_CAP_SD_SWAP | MDTEST_CAP_WIFI | MDTEST_CAP_BLUETOOTH |        \
+   MDTEST_CAP_REPORT)
 
 // The tests a job runs.
 #define MDTEST_TEST_DUMMY 1U  // parameters: seconds; result: seconds, steps
@@ -278,7 +286,19 @@
 #define MDTEST_BT_PHASE_CLASSIC 2U
 #define MDTEST_BT_PHASE_LE 3U
 #define MDTEST_BT_PHASES 4U
-#define MDTEST_TEST_LAST MDTEST_TEST_BLUETOOTH
+// The report saved on the microSD card: the job starts the card and opens a
+// new file, MDTEST_REPORT_NAME with the first free number; the program then
+// sends the text (MDTEST_CMD_REPORT_DATA) and an empty chunk to end it; the
+// job closes the file and ends with file=, bytes=. Live words: the phase
+// (MDTEST_REPORT_PHASE_*), KB written.
+#define MDTEST_TEST_REPORT 9U
+#define MDTEST_REPORT_NAME "MDTEST-REPORT-%02u.TXT"
+#define MDTEST_REPORT_FILES 100U
+#define MDTEST_REPORT_CHUNK_BYTES 1800U
+#define MDTEST_REPORT_PHASE_START 0U
+#define MDTEST_REPORT_PHASE_READY 1U  // the file is open: send the text
+#define MDTEST_REPORT_PHASE_CLOSE 2U
+#define MDTEST_TEST_LAST MDTEST_TEST_REPORT
 
 // A job's status answer: MDTEST_ANS_DATA + these words.
 #define MDTEST_JOB_ANS_NUMBER 0U
@@ -371,6 +391,18 @@ void mdtest_fillWindow(uint16_t *window, const char *version,
  * @brief Rewrite the header's state word and its checksum.
  */
 void mdtest_setState(uint16_t *window, uint16_t state);
+
+// The bench mode the program starts in (debug and EmuMD builds set it): the
+// line test in a loop, then the RP's requests, or the requests at once.
+#define MDTEST_BENCH_NONE 0U
+#define MDTEST_BENCH_LINE 1U
+#define MDTEST_BENCH_REQUESTS 2U
+#define MDTEST_BENCH_COMMANDS 3U
+
+/**
+ * @brief The header's bench word, the checksum sealed again.
+ */
+void mdtest_setBench(uint16_t *window, uint16_t bench);
 
 /**
  * @brief Turn a freshly filled window into what a faulty bus would deliver.

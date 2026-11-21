@@ -1,6 +1,6 @@
 #include "machine.h"
 
-#include <mint/osbind.h>
+#include "hw.h"
 
 #define COOKIE_JAR (*(long **)0x5A0)
 #define SYSBASE (*(unsigned char **)0x4F2)
@@ -36,13 +36,10 @@ void machine_identify(Machine *m) {
   m->cpu = cookie(COOKIE_CPU, &value) ? value : 0;
   m->tos = *(unsigned short *)(os + 2);
   m->tosDate = *(unsigned long *)(os + 0x18);
-  m->gemdos = (unsigned short)Sversion();
   m->stRam = PHYSTOP;
   m->ttRam = (RAMVALID == RAMVALID_MAGIC && RAMTOP > TTRAM_START)
                  ? RAMTOP - TTRAM_START
                  : 0;
-  m->freeRam = (unsigned long)Malloc(-1L);
-  m->rez = Getrez();
   m->msteFast = 0;
   m->msteCache = 0;
   if (machine_isMegaSte(m)) {
@@ -74,20 +71,9 @@ const char *machine_name(const Machine *m) {
 }
 
 const char *machine_screen(const Machine *m) {
-  switch (m->rez) {
-    case 0:
-      return "low resolution";
-    case 1:
-      return "medium resolution";
-    case 2:
-      return "high resolution";
-    case 4:
-      return "TT medium";
-    case 6:
-      return "TT high";
-    case 7:
-      return "TT low";
-    default:
-      return "other resolution";
-  }
+  (void)m;
+  /* The program's own: high resolution on a mono monitor, medium on
+   * colour. */
+  return hw_mono() ? "monochrome monitor, 640 x 400"
+                   : "colour monitor, 640 x 200, 4 colours";
 }
