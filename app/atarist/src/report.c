@@ -148,6 +148,11 @@ void report_save(const char *gate, int channelOpen, long mch) {
   for (int i = 0; i < lines && !w.error; i++) {
     console_wrap(reportLine(i, keepNames), REPORT_COLUMNS, putFile, &w);
   }
+  if (console_reportDropped() && !w.error) {
+    char full[REPORT_COLUMNS];
+    snprintf(full, sizeof(full), T_REPORT_FULL, console_reportDropped());
+    putFile(full, &w);
+  }
   if (!w.error && w.length && !sendChunk(&w)) w.error = 1;
   if (w.error || !sendChunk(&w)) { /* the empty chunk ends the file */
     chscreen_cancel();
