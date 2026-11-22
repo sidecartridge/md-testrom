@@ -18,7 +18,7 @@ cd "$(dirname "$0")/.."
 fail=0
 version="$(tr -d '[:space:]' < version.txt)"
 
-backlog="$(git grep --cached -IinE "EPIC-|STORY-|\bepics?\b|\bstor(y|ies)\b|docs/" \
+backlog="$(git grep --cached -IinE "EPIC-|STORY-|\bepics?\b|\bstor(y|ies)\b|docs/|\b[CDF]-[0-9]{2}\b" \
   -- . ':!CLAUDE.md' ':!.gitignore' ':!tools/release_check.sh' || true)"
 if [[ -n "$backlog" ]]; then
   echo "release_check: committed files name the planning backlog:" >&2

@@ -4,9 +4,10 @@
 for the computer as a `.mdfw` and runs it in its fork of Hatari, with a
 Multi-device on the cartridge port. It is the fast bench for the firmware's
 logic and the Atari program, on every machine Hatari emulates. It times
-nothing (the emulated Multi-device is infinitely fast) and has no PIO, DMA,
-pins or radio, so the bus, timing and sign-off stay on the device, with the
-tools in `tools/dev/`.
+nothing (the emulated Multi-device is infinitely fast) and has no PIO, DMA or
+pins, so the bus, timing and sign-off stay on the device, with the tools in
+`tools/dev/`. Its radio chip is a stand-in, and Wi-Fi goes through this
+computer's network.
 
 ## Set-up
 
@@ -17,7 +18,12 @@ mkdir -p emu/tos emu/sd
 ln -s "/path/to/TOS 1.04 - English UK - 50Hz.img" emu/tos/tos104uk.img
 ln -s "/path/to/TOS 1.62 - English-UK - 50Hz"     emu/tos/tos162uk.img
 ln -s "/path/to/TOS v2.06 (Mega-STE)(US).img"     emu/tos/tos206us.img
+ln -s "/path/to/TOS 3.06 (TT)(UK).img"            emu/tos/tos306uk.img
+ln -s "/path/to/TOS 4.04 (Falcon).img"            emu/tos/tos404.img
 ```
+
+The harness (`tools/dev/emu_harness.py --all`) runs on the ST, STE, Mega STE,
+TT and Falcon, and skips a setup whose TOS image is not linked.
 
 `emu/tos/` and `emu/sd/` (the emulated microSD card) are not committed. The
 Hatari build and EmuTOS live in `tools/dev/builds/emumd-cache/`, not
@@ -36,13 +42,20 @@ for, and `emu/standins.c` supplies the rest:
 
 - the two-bank engine's set-up and stop (`romemul_initTwoBanks()`,
   `romemul_stop()`, `commemul_stop()`): EmuMD's window is already 128 KB;
-- SELECT: creating the file `EMU_SELECT_FILE` names is a short press, which
-  leaves for Booster (EmuMD does not run Booster, so the firmware stops);
+- SELECT: creating the file `EMU_SELECT_FILE` names presses it, the file
+  holding how long in ms (the harness's `select MS`); outside the SELECT test a
+  short press leaves for Booster (EmuMD does not run Booster, so the firmware
+  stops), during it the press is the test's;
+- the microSD card (`cardhw_*`): in unless the file `EMU_CARD_OUT_FILE` names
+  exists (the harness's `card out|in`), with `MDTEST_CARD_FAULT` for its
+  failures; FatFs works on the `[run]` `sd` folder;
+- the Bluetooth controller (`bthw_*`): three devices, `EMU_BT_FAIL` and
+  `EMU_BT_NONE` (the harness's `@btfail`, `@btnone`);
 - `health.c`, left out: it reads the RP2040's watchdog, fault handlers and SCB.
 
-The radio chip's code (`network.c`, `blink.c`) is left out until a test uses
-it; it then needs a `[wifi]` section in `mdfw.ini`. `emu/shim/prefix.h` puts
-EmuMD's own `reset.h` (no ARM code) ahead of the firmware's.
+The radio chip is EmuMD's (`[wifi] arch = poll` in `mdfw.ini`): `network.c` is
+built, `blink.c` left out (nothing calls it). `emu/shim/prefix.h` puts EmuMD's
+own `reset.h` (no ARM code) ahead of the firmware's.
 
 ## What it cannot show
 
@@ -56,8 +69,8 @@ EmuMD's own `reset.h` (no ARM code) ahead of the firmware's.
   (`MDTEST_BENCH=commands`, the harness's `@bench commands`).
 - **Answer timing.** The firmware's main loop runs on a host thread beside
   the emulator, so an answer now and then comes later than on the device.
-- PIO, DMA and bus timing; the SELECT button and the LED; the real card and
-  radio; flash and memory numbers.
+- PIO, DMA and bus timing; the real SELECT button, LED, card and radios;
+  flash and memory numbers.
 
 ## Gotchas
 
@@ -65,7 +78,7 @@ EmuMD's own `reset.h` (no ARM code) ahead of the firmware's.
   of the cartridge. Programs travel on floppy images
   (`tools/dev/make_floppy.sh FOLDER disk.st`, then `--disk-a disk.st`).
 - **`mdfw run --headless` stops after 500 frames** unless `--frames` says
-  otherwise; the STE and the Mega STE take about 2,000 to reach the desktop.
+  otherwise; the STE and the Mega STE take about 2,500 to reach the desktop.
 - **Without `--no-user-config`** Hatari reads your own `hatari.cfg`.
 - **Addresses are 64 bits on the host**: `mdfw.ini` turns a cast that cuts a
   pointer into a build error.

@@ -22,8 +22,10 @@ produces, and the hard rules.
   Atari program. Export `STCMD_IMAGE_TAG=1.5.0`, and `STCMD_NO_TTY=1` when not
   in a terminal.
 - **EmuMD's Hatari** — `tools/dev/build_hatari_fork.sh` once (macOS:
-  `brew install cmake sdl2 libpng pkg-config`), and TOS images linked into
-  `emu/tos/` as `tos104uk.img`, `tos162uk.img`, `tos206us.img`.
+  `brew install cmake sdl2 libpng libslirp pkg-config`), and TOS images linked
+  into `emu/tos/` as `tos104uk.img`, `tos162uk.img`, `tos206us.img`,
+  `tos306uk.img` (TT) and `tos404.img` (Falcon); the harness skips a setup
+  whose image is missing.
 - **Raspberry Pi Debug Probe**, for the device only — wired to the
   Multi-device's SWD pins and its UART (GPIO 0/1), and **OpenOCD**: set
   `OPENOCD` to the Raspberry Pi fork's build (`../pico/openocd/src/openocd`)
@@ -65,7 +67,7 @@ python3 tools/dev/swd.py crash
 | EmuMD build: `cast to smaller integer type` | An address kept in a 32-bit integer | `uintptr_t` (EmuMD's host is 64-bit) |
 | EmuMD: every ROM3 read is `$FFFF` | EmuMD does not serve ROM3 data | Expected: ROM3's data is checked on the device |
 | `emu_harness.py`: no `MDTEST:` lines | Hatari without NatFeats | The harness passes `--natfeats yes`; by hand, add it |
-| EmuMD screenshot blank | The TOS has not finished booting | More `--frames` (STE and Mega STE take about 2,000) |
+| EmuMD screenshot blank | The TOS has not finished booting | More `--frames` (STE and Mega STE take about 2,500) |
 | `swd.py window --pattern` fails a few words at `$FA2004` | Something wrote the template's token into the window | The window must be filled after `chandler_init()` |
 | `stcmd` pulls an image that does not exist | `$VERSION` (the app's) taken as the image tag by an old wrapper | `STCMD_IMAGE_TAG=1.5.0`, and never export `VERSION` |
 
@@ -73,8 +75,8 @@ python3 tools/dev/swd.py crash
 
 - Never modify a submodule; FatFs is configured in `rp/src/ff/ffconf.h`.
 - Never probe Booster. A step that ends in Booster ends the probe session.
-- Never flash through the probe while a program on the ST reads the cartridge: the ST
-  crashes (four bombs). Flash with the ST idle at the desktop.
+- Never flash through the probe, or `swd.py reset`, while a program on the ST reads the
+  cartridge: the ST crashes (four bombs). Flash with the ST idle at the desktop.
 - Never give EmuMD's Hatari a GEMDOS drive.
 - Nothing committed names a planning item or the local planning notes; no AI
   attribution anywhere (`CLAUDE.md`).
