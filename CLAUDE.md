@@ -59,8 +59,8 @@ STCMD_IMAGE_TAG=1.5.0 ST_WORKING_FOLDER=$PWD stcmd make -C app/atarist   # app/a
 
 ### CI / release
 - `.github/workflows/build.yml` runs the host tests and builds `pico_w` release and debug on every pull request, with the ARM GNU Toolchain 14.2 and toolkit 1.5.0, and the `APP_UUID` secret (the development UUID where it is not available).
-- `.github/workflows/release.yml` triggers on `v*` tags: builds, attaches the UF2 + JSON to the GitHub Release (notes from `CHANGELOG.md` up to the first `---`), uploads them to `s3://atarist.sidecartridge.com/`. It does not attach `MDTEST.TOS` yet (the build workflow keeps it as an artifact).
-- `make tag` tags HEAD with the contents of `version.txt` and pushes it (triggers the release). Tagging/releasing is the repo owner's call — a change lands as a `version.txt` bump plus a `CHANGELOG.md` entry.
+- `.github/workflows/release.yml` triggers on `v*` tags: runs `tools/release_check.sh` with the tag, builds, attaches the UF2, the JSON, `MDTEST.TOS` and `MDTEST.ST` (a 720 KB floppy image with the program at its root, `tools/dev/make_floppy.sh`) to the GitHub Release (notes from `CHANGELOG.md` up to the first `---`), and uploads the UF2 and the JSON only to `s3://atarist.sidecartridge.com/` (Booster's bucket, shared by every app). Run by hand (`workflow_dispatch`) it builds the same files and keeps them as the run's artifact, publishing nothing: the rehearsal.
+- `make tag` runs `make check` (`tools/release_check.sh`: nothing committed names the backlog, `CHANGELOG.md`'s top section is `version.txt`'s version), then tags HEAD with the contents of `version.txt` and pushes it (triggers the release). Tagging/releasing is the repo owner's call — a change lands as a `version.txt` bump plus a `CHANGELOG.md` entry.
 - `secrets.sh` holds AWS credentials and is gitignored. Never print, commit or copy its contents.
 
 ### Tests / verification
@@ -87,10 +87,11 @@ working rules). **The whole `docs/` tree is gitignored** and lives only on the d
 - **Never reference a path under `docs/`** from anything that ships, for the same reason: someone
   who clones the repo has no `docs/`. Inline the information itself.
 - Traceability runs the other way: once work lands, record the commit hash in the planning note.
-- Before tagging a release, check:
-  `git grep -IiE "EPIC-|STORY-|\bepics?\b|\bstor(y|ies)\b|docs/" -- . ':!CLAUDE.md' ':!.gitignore'`
-  must come back empty (this section and the `.gitignore` entry are the only places the backlog
-  is mentioned).
+- Before tagging a release, `make check` (`tools/release_check.sh`, which `make tag` and the release
+  workflow run too) checks that
+  `git grep -IiE "EPIC-|STORY-|\bepics?\b|\bstor(y|ies)\b|docs/" -- . ':!CLAUDE.md' ':!.gitignore' ':!tools/release_check.sh'`
+  comes back empty (this section, the `.gitignore` entry and the check itself are the only places
+  the backlog is mentioned).
 
 ## Architecture
 

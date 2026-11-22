@@ -1,5 +1,11 @@
 name: Release
 
+# A v* tag builds the release and publishes it: the microfirmware (UF2 and
+# its descriptor) to the GitHub release and the bucket Booster installs from,
+# the program (MDTEST.TOS and a floppy image, MDTEST.ST) to the GitHub
+# release. Run by hand, it builds the same files and keeps them as the run's
+# artifact, publishing nothing: a rehearsal.
+
 on:
   push:
     tags:
@@ -35,7 +41,7 @@ jobs:
     - name: Install the build tools
       run: |
           sudo DEBIAN_FRONTEND=noninteractive apt update
-          sudo DEBIAN_FRONTEND=noninteractive apt install -y cmake build-essential
+          sudo DEBIAN_FRONTEND=noninteractive apt install -y cmake build-essential mtools
 
     - name: Cache the ARM GNU Toolchain
       id: arm-toolchain
@@ -66,10 +72,18 @@ jobs:
       run: |
         pip install boto3
           
+    - name: Check the release
+      run: |
+        if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          tools/release_check.sh "$GITHUB_REF_NAME"
+        else
+          tools/release_check.sh
+        fi
+
     - name: Run - Build PICO_W release version
       env:
         APP_UUID: ${{ secrets.APP_UUID }}
-      run: ./build.sh pico_w Release ${APP_UUID:-44444444-4444-4444-8444-444444444444}
+      run: ./build.sh pico_w release ${APP_UUID:-44444444-4444-4444-8444-444444444444}
 
     - name: Get current date
       id: build
@@ -88,11 +102,22 @@ jobs:
 
     - name: Copy release artifacts
       run: |
-        mkdir -p release
+        mkdir -p release floppy
         cp dist/*.uf2 release/
         cp dist/*.json release/
+        cp dist/MDTEST.TOS release/
+        cp dist/MDTEST.TOS floppy/
+        tools/dev/make_floppy.sh floppy release/MDTEST.ST MDTEST
+        ls -l release
+
+    - name: Keep the files as the run's artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ env.RELEASE_VERSION }}
+        path: release/
 
     - name: Upload the binaries to release
+      if: startsWith(github.ref, 'refs/tags/v')
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -110,6 +135,7 @@ jobs:
         make_latest: true
 
     - name: Upload artifacts to S3
+      if: startsWith(github.ref, 'refs/tags/v')
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -123,7 +149,10 @@ jobs:
         release_dir = 'release'
         bucket_name = 'atarist.sidecartridge.com'
 
-        for filename in os.listdir(release_dir):
+        # Only the microfirmware: the bucket is Booster's, shared by every app.
+        for filename in sorted(os.listdir(release_dir)):
+            if not filename.endswith(('.uf2', '.json')):
+                continue
             local_path = os.path.join(release_dir, filename)
             s3_path = filename  # uploaded at root of the bucket
             print(f"Uploading {local_path} to s3://{bucket_name}/{s3_path}")
