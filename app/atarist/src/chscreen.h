@@ -25,8 +25,13 @@ typedef enum {
 
 /* Select ROM3 and say hello; from then on every line is mirrored to the
  * RP. 1 when commands work and both sides speak the
- * same protocol; says why not otherwise. */
+ * same protocol; says why not otherwise. The hello's lines are shown only
+ * when this selects ROM3 (the channel's test always shows them). */
 int chscreen_open(long mch);
+
+/* The same, the hello's lines shown even if ROM3 was already selected (the
+ * channel's test, and a channel selected again after the RP restarted). */
+int chscreen_greet(long mch);
 
 /* Open the channel, then test it. */
 ChVerdict chscreen_test(long mch);

@@ -42,6 +42,11 @@ void cmd_init(long mch, int megaSte);
 int cmd_send(unsigned short command, const unsigned short *words, int count,
              CmdAnswer *answer);
 
+/* A frame nothing answers, read while ROM3 is data (the line test's
+ * verdict): no token, no retry, the Mega STE's cache off for it. */
+void cmd_sendOneWay(unsigned short command, const unsigned short *words,
+                    int count);
+
 /* The header's state word: ROM3 selected or data. */
 int cmd_selected(void);
 

@@ -89,6 +89,33 @@ static unsigned short servedSeq(void) {
   return seq;
 }
 
+void cmd_sendOneWay(unsigned short command, const unsigned short *words,
+                    int count) {
+  const volatile unsigned char *rom3 =
+      (const volatile unsigned char *)(MDTEST_ROM3_ADDRESS + 0x8000UL);
+  /* Through a Mega STE's cache a byte read fetches its whole word, which
+   * asserts !UDS, the RP's bit 0: every odd word of the frame would arrive
+   * even, and the header would not match. */
+  unsigned char cache = 0;
+  if (megaSteMachine) {
+    cache = MSTE_SPEED_CACHE;
+    MSTE_SPEED_CACHE = (unsigned char)(cache & ~1);
+  }
+  unsigned short size = (unsigned short)(4 + 2 * count);
+  unsigned short sum = (unsigned short)(command + size);
+  (void)rom3[(short)0xABCD];
+  (void)rom3[(short)command];
+  (void)rom3[(short)size];
+  (void)rom3[0];  /* the token: none, nothing answers */
+  (void)rom3[0];
+  for (int i = 0; i < count; i++) {
+    sum = (unsigned short)(sum + words[i]);
+    (void)rom3[(short)words[i]];
+  }
+  (void)rom3[(short)sum];
+  if (megaSteMachine) MSTE_SPEED_CACHE = cache;
+}
+
 int cmd_send(unsigned short command, const unsigned short *words, int count,
              CmdAnswer *answer) {
   /* A Mega STE's cache answers cartridge reads from old copies: off for the
