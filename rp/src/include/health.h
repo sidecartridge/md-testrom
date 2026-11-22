@@ -86,8 +86,8 @@ typedef struct {
 
 // Call first thing in emul_start: decodes the previous reset, updates
 // the crash-loop guard and paints the stack. Must run before
-// health_watchdogStart, which overwrites the SDK's reboot marker. Setup mode
-// and ROM mode both run the watchdog (D-14).
+// health_watchdogStart, which overwrites the SDK's reboot marker. emul_start
+// starts the watchdog right after it, before anything else.
 void health_init(void);
 
 // Enable the watchdog. Feed it only with health_feed, from the main

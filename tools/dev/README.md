@@ -39,7 +39,8 @@ What differs here:
   `text`, `key`, `type` and `st-reset` say they do not apply and exit 1.
 - **The command channel runs once the program selects ROM3.** `swd.py counters` and `ring` show
   what the capture and the parser made of the ST's ROM3 reads; `inject` and `app` (`heap_hold`,
-  `health`, and this app's `fault`, `drop`, `select`, `restart`, `chip_fail`, `card_fault`) work on debug builds, and
+  `health`, and this app's `fault`, `drop`, `select`, `restart`, `chip_fail`, `card_fault`,
+  `wifi_not_set_up`, `bench`) work on debug builds, and
   injected commands answer only while ROM3 is selected (`app select 1`). `app restart` is an RP
   restart as the ST sees it (ROM3 test data again, the job gone, a new boot ID) with no reset:
   `swd.py reset` while a program reads the cartridge crashes the ST, as a flash does. `swd.py log` shows the program's screen
@@ -50,7 +51,8 @@ What differs here:
   this ELF's vector table; a short press must make the RP leave for Booster, which ends the probe
   session.
 - **No `power_cycles.py`**: the sibling's tool asked for the ST to be power-cycled, which wears a
-  machine this old; a boot of the RP alone goes through `swd.py reset` or SELECT.
+  machine this old; a restart of the RP alone is `swd.py reset` (the ST at the desktop) or, as the
+  ST sees it, `swd.py app restart`. A short SELECT press leaves for Booster.
 - **`flash.sh`** is the sibling's, without its HTTPS profile: pins pico-sdk 2.2.0, pico-extras
   sdk-2.2.0 and fatfs-sdk v3.6.2, CMake Release for both types.
 - **OpenOCD**: set `OPENOCD` to the Raspberry Pi fork's build
@@ -85,10 +87,13 @@ cache. What EmuMD does and does not stand in for, for this firmware:
 - The window is 128 KB, as on the device; ROM4 is served from its first half.
 - An ST read of ROM3 reaches the firmware as a command-ring sample and returns no data: the ROM3
   half of the read tests can only be checked on the device.
-- SELECT, the LED, PIO, DMA and timing are not emulated. Bluetooth is Bluepad32's scripted
-  controllers only.
+- PIO, DMA and timing are not emulated. SELECT is a stand-in held for a set time (`select MS` in
+  the harness's steps), the LED is EmuMD's radio-chip stand-in (`[wifi]` in `mdfw.ini`), the
+  microSD card is the run's `sd` folder with a stand-in for the card itself (`card out|in`,
+  `@cardfault N`), Wi-Fi goes through this computer's network, and the Bluetooth controller is a
+  stand-in (`emu/standins.c`: three devices, `@btfail`, `@btnone`).
 - Never give this Hatari a GEMDOS drive (`--harddrive`): it takes the first 1 KB of the
-  cartridge. Programs travel on floppy images (`make_floppy_image.py`).
+  cartridge. Programs travel on floppy images (`make_floppy.sh`).
 
 The firmware itself (`mdfw.ini`, `emu/`; `emu/README.md` has the details):
 
@@ -198,8 +203,7 @@ tools/dev/flash.sh debug --build-only     # build only
 tools/dev/flash.sh debug --src /tmp/src   # build a copy of rp/src (for example a patched linker script)
 ```
 
-Builds out of tree in `tools/dev/builds/<type>`, incrementally, the profile releases ship (HTTP and
-HTTPS downloads; `APP_DOWNLOAD_HTTPS=0` builds HTTP only, in `tools/dev/builds/<type>-http`). It does not touch `rp/build` or
+Builds out of tree in `tools/dev/builds/<type>`, incrementally. It does not touch `rp/build` or
 the submodules, and warns when a submodule is not at the version `rp/build.sh` pins. It builds
 with the same CMake build type as `rp/build.sh` (Release; `RP_CMAKE_BUILD_TYPE` overrides it,
 with a warning, in a folder of its own). The window's
@@ -229,23 +233,17 @@ python3 tools/dev/swd.py verify tools/dev/builds/debug/rp.elf    # flash identic
 python3 tools/dev/swd.py build-id                                # which build is on the RP?
 python3 tools/dev/swd.py read 0x20028000 8000 fb.bin             # dump memory
 python3 tools/dev/swd.py program tools/dev/builds/debug/rp.elf   # flash through the probe
-python3 tools/dev/swd.py screen menu.png                         # the setup menu as the ST shows it
-python3 tools/dev/swd.py text                                    # the setup menu as text
 python3 tools/dev/swd.py shared                                  # token + shared variables
 python3 tools/dev/swd.py resume                                  # release cores a debugger left halted
 python3 tools/dev/swd.py reset                                   # reset the whole chip, watchdog-style
 python3 tools/dev/swd.py select short                            # press SELECT (short press)
 python3 tools/dev/select_harness.py bounce                       # 15 ms press: ignored
 python3 tools/dev/select_harness.py during-test                  # press in the SELECT test: reported
-python3 tools/dev/select_harness.py short                        # short press: the RP restarts
+python3 tools/dev/select_harness.py short                        # short press: leaves for Booster
 python3 tools/dev/select_harness.py backup settings.bin          # save the settings flash
 python3 tools/dev/select_harness.py long --force                 # 10 s press: factory reset
 python3 tools/dev/select_harness.py restore settings.bin         # put the settings back
-python3 tools/dev/swd.py key g                                   # a keystroke, as if typed on the ST
-python3 tools/dev/swd.py key down                                # a named key: up down left right esc return space
-python3 tools/dev/swd.py type "put_str FOLDER /roms" --enter     # a line in [S]ettings (the menu takes single keys), one OpenOCD
 python3 tools/dev/swd.py app heap_hold 16                        # hold 16 KB more heap (0 releases)
-python3 tools/dev/swd.py app wifi 0                              # Wi-Fi down as a lost network (1: up)
 python3 tools/dev/swd.py inject 0x0001 0x0067 0                  # any protocol command
 python3 tools/dev/swd.py crash                                   # why did it last reboot? (health.c's record)
 python3 tools/dev/swd.py app health 3                            # provoke a hang (1 panic, 2 fault, 4 stall, 5 overflow)
@@ -258,11 +256,8 @@ python3 tools/dev/swd.py ring --since-mark                       # only what the
 python3 tools/dev/swd.py heap --watch 5 --csv tools/dev/logs/heap.csv   # sample during a test
 ```
 
-`screen` renders the 320×200 framebuffer at `DISPLAY_BUFFER_OFFSET` of the cartridge window as a
-PNG (scaled 2×, `--scale`). It shows what the RP draws for the ST: the setup menu, not GEM or a
-running program. `text` prints the terminal's character buffer (the `screen` array of term.c); the
-bottom status line is drawn straight to the framebuffer and only shows in `screen`. `shared`
-prints the command sentinel, the random token, the token seed and the shared variables, named
+`screen` and `text` are the template's (its framebuffer and terminal), which this headless
+firmware does not have: they say so and exit 1. `shared` prints the command sentinel, the random token, the token seed and the shared variables, named
 after the `*_SVAR_*` / `*_SHARED_VARIABLE_*` indexes in `rp/src/include` (`chandler.h` names the
 first three slots). They take the
 window address from the ELF; without `--elf` they use the cached ELF whose build ID the RP
@@ -299,65 +294,61 @@ halt run `resume`, which releases both cores; OpenOCD's own `resume` fails in a 
 `select` needs no firmware code: it forces the SELECT pin's input high through the RP2040's GPIO
 input override for 300 ms (`short`) or `SELECT_LONG_RESET` + 1 s (`long`). A long press needs
 `--force`, because in a microfirmware that wires SELECT the usual way it is a factory reset: it
-erases the global settings, and Booster then clears every app's settings. In this template a short
-press restarts the RP. `select release` clears an
+erases the global settings, and Booster then clears every app's settings. Here a short press
+leaves for Booster (during the SELECT test, and for 500 ms after, it is the test's). `select release` clears an
 override left behind. The press is held inside one OpenOCD session, so nothing else can use the
 probe until it ends: to look at the device during a press, put the reads in that same session
 (`mww` the override, `sleep`, `mdw`/`mdb` what you want, `mww` it back).
 
-`key`, `app` and `inject` need a `debug` build. They write a small mailbox in RAM
+`app` and `inject` need a `debug` build. They write a small mailbox in RAM
 (`rp/src/include/devhooks.h`, found by its `devhooksMailbox` symbol) and wait for the main loop to
-acknowledge it. `key` and `inject` queue a protocol command as if the ST had sent it, through
+acknowledge it. `inject` queues a protocol command as if the ST had sent it, through
 `chandler_injectProtocol()`, so the firmware handles it through its normal path: the same
-callbacks, the same answer. The setup terminal is line-based, so a menu command is its key and
-then Enter (`swd.py key h`, then `swd.py key $'\n'`); the `[B]` and `[D]` lists take single keys,
-by name for the cursor keys (`swd.py key down`: ASCII 0 and the ST's scan code). `app NAME` runs the app command defined as
-`DEVHOOKS_APP_<NAME>` in `rp/src/include/emul.h`, handled by `emul_devhooksApp()`:
+callbacks, the same answer; it is answered only while ROM3 is selected (`app select 1`). `app NAME`
+runs the app command defined as `DEVHOOKS_APP_<NAME>` in `rp/src/include/emul.h`, handled by
+`emul_devhooksApp()`:
 
 - `heap_hold KB`: hold KB more kilobytes of heap, on top of what is already held (`heap_hold 0`
   releases everything). Result 0 when the allocation is refused, so repeated calls walk the heap
   down to a known remainder. Watch it with `swd.py heap`.
-- `sd 0|1`: 0 makes the SD card look pulled (the presence check fails at once, and nothing mounts),
-  1 puts it back (the next poll mounts it, within 2 s): the path a real pull and reinsertion take.
-  A pull in the middle of an operation needs GDB: break in `disk_read` or `disk_write`, return
-  `RES_ERROR` (1) and set `sdcardTestRemoved`; presence checks read sector 0, so a condition on the
-  sector argument (`$r2 != 0`) leaves them alone.
 - `health N`: provoke a failure from the main loop 250 ms later (`health.h`'s `health_test_t`): 1
   `panic()`, 2 a HardFault, 3 a hang (the watchdog), 4 a 500 ms stall (no reboot), 5 a stack
-  overflow into the guard. Each reboots and names itself in `swd.py crash`, on the console and on
-  the menu's "Last restart:" line. Three within 60 s trip the crash-loop guard (setup mode, no
-  autorun); a SELECT press clears it. A hang in ROM mode or the Delay wait: write 1 to
-  `romModeTestHang` over SWD (a GDB `set var`), and the watchdog reboots the RP into the same ROM.
-  `healthMaxFeedGapUs` and `healthMaxFeedGapPhase` hold the longest gap between watchdog feeds.
-- `wifi 0|1`: 0 leaves the access point as a lost network would: the link check notices, the
-  menu says "Wi-Fi lost; joining again.", and the app joins again by itself 5 s later and refreshes
-  the catalog (about 10 s in all). 1 makes the next try now instead of after the backoff. A
-  silent loss (the link up, the network gone): set the station's gateway to an address nobody
-  answers with GDB (`set var cyw43_state.netif[0].gw.addr = 0xFD01A8C0`, 192.168.1.253) and the
-  gateway probe gives up within about 75 s. No AP at boot: rename `WIFI_SSID` in RAM at the first
-  connect, with a GDB breakpoint there, and put it back later.
+  overflow into the guard. Each reboots and names itself in `swd.py crash`, on the console and in
+  the program's device information; three within 60 s are a restart loop, which device
+  information warns about. `healthMaxFeedGapUs` and `healthMaxFeedGapPhase` hold the longest gap between watchdog feeds.
+- `fault KIND A B`: refill the window, then serve it as a faulty bus would (`MDTEST_FAULT_*`,
+  `common/mdtest.h`); `fault 0` serves it whole again. `tools/dev/bus_faults.py` runs each.
+- `drop N`: every Nth command runs unanswered, as if its answer were lost (0: none).
+- `select 0|1`: ROM3 given back or selected with no ST, for injected commands.
+- `restart`: an RP restart as the ST sees it (ROM3 test data again, the job gone, a new boot ID),
+  with no reset.
+- `chip_fail 0|1`: the radio chip fails to start, and the LED with it, as a dead radio would.
+- `card_fault N`: the microSD card fails as `CARDTEST_FAULT_N` (`cardtest.h`): 1 no card answers,
+  2 no free space, 3 a write fails, 4 a byte read back differs; 0 puts it back.
+- `wifi_not_set_up 0|1`: the Wi-Fi test reads Booster's Wi-Fi as not set up to join a network.
+- `bench N`: the program starts in bench mode N (`MDTEST_BENCH_*`: 1 the line test in a loop, 2
+  then the RP's requests, 3 the requests at once with a debug program); 0 puts it back.
 
 Add an app's own commands the same way: a `DEVHOOKS_APP_<NAME>` define and a case in the handler.
 Useful ones in other microfirmwares: stop a boot countdown; stall or fail the next answer on
 purpose, to exercise the ST's retry path.
 
 `ring` decodes what the ST sent from the ROM3 capture ring (`commemul.c`) without halting the RP,
-on a release build as on a debug one. It holds the last 8,192 bus samples: about 800 small
-commands (6 to 10 samples each), or 15 writes of 1 KB. Each frame shows its sample number since the RP booted, the command (named
-from the `APP_<APP>` / `APP_<APP>_<COMMAND>` defines, as `term.h` has them, and chandler's
-framework commands; others print as hex), its payload size, the random token, the first four 32-bit
+on a release build as on a debug one. It holds the last 2,048 bus samples: about 200 small
+commands (6 to 10 samples each), or 3 report chunks of 1,800 bytes. Each frame shows its sample
+number since the RP booted, the command (named from chandler's framework commands and
+`common/mdtest.h`'s `MDTEST_CMD_*`; others print as hex), its payload size, the random token, the first four 32-bit
 parameters in the order `TPROTO_GET_PAYLOAD_PARAM32` reads them, and a mark on a bad checksum.
 The oldest frame is often cut by the ring's start and shows as a bad checksum. A frame whose size
 is past `MAX_PROTOCOL_PAYLOAD_SIZE` shows as dropped, as the RP drops it.
 The DMA keeps writing while the ring is read, so `ring` reads its write position before and
-after and drops the samples it may have overwritten meanwhile. During a sustained burst of 1 KB
-writes the ST sends about 200,000 samples a second and refills the ring in about 40 ms, faster
+after and drops the samples it may have overwritten meanwhile. During a sustained burst of large
+frames the ST sends about 200,000 samples a second and refills the ring in about 10 ms, faster
 than SWD copies it: `ring` then says so instead of printing half-overwritten frames, and reads
 normally once the burst is over. `--mark` stores the position in
 `tools/dev/logs/ring.mark` and `--since-mark` shows only what came after it, or says how much the
-ring lost in between. Commands sent with `key` or `inject` go through the mailbox, not the bus, so
-they never appear here. An ST reset through the sentinel shows up as `CHANDLER_ST_HELLO` and two
-`CHANDLER_SET_SHARED_VAR` (the machine, then the TOS version).
+ring lost in between. Commands sent with `inject` go through the mailbox, not the bus, so they
+never appear here.
 
 `crash` prints the watchdog reason and scratch registers of the last reboot without stopping the
 RP, with code addresses resolved to source lines by `addr2line`.
@@ -377,9 +368,8 @@ catches short-lived allocations between samples. A shortage shows as a peak with
 before the stack, or as plenty of free bytes but a small largest block (fragmentation). `--watch
 SECONDS` samples until Ctrl-C; `--csv FILE` appends every sample for later comparison. If the
 heap changes while it is read, the chunk walk is retried once and otherwise reported as failed.
-The heap's limit is `__StackLimit` in `rp/src/memmap_rp.ld`. In this firmware it is still the end
-of the 128 KB cartridge window (`0x20040000`), not the end of `RAM`, so the size `heap` reports
-includes the window, and an allocation can be handed addresses the ST reads.
+The heap's limit is `__StackLimit` in `rp/src/memmap_rp.ld`: the end of `RAM`, `0x20020000`, where
+the cartridge window starts, so no allocation is handed addresses the ST reads.
 
 OpenOCD is `$OPENOCD`, `openocd` on `PATH`, or `../pico/openocd/src/openocd`; its scripts come
 from `$PICO_OPENOCD_PATH`, the variable `.vscode/launch.json` uses. A command that fails on a
@@ -393,50 +383,20 @@ Debug Probe and `console.py watch` running (they read its log, never the UART); 
 report to `logs/` and exits 0 only when every check passes.
 
 ```bash
-python3 tools/dev/tools_harness.py --build --flash --reset   # every tool above, against the device
-python3 tools/dev/st_harness.py --oversize --long            # the command path, from the ST's side
-python3 tools/dev/download_harness.py                        # real downloads, checked by MD5
+python3 tools/dev/tools_harness.py --channel                 # the command channel's checks
+python3 tools/dev/tools_harness.py --channel --rounds 1000   # and 1,000 select/hello/unselect rounds
 ```
 
-- `tools_harness.py` checks the tools themselves on a debug build: the running firmware and its
-  build ID, the console, `screen` / `text` / `shared`, the mailbox commands (`key`, `inject`,
-  `app heap_hold`), `counters`, `ring`, a SELECT press (which restarts the RP), `crash` and
-  `postmortem`. `--build` also builds both types and checks their flags and symbols, `--flash`
-  flashes the debug build first, and `--reset` restarts the RP at the end.
-- `st_harness.py` tests the command path from the ST's side. It copies the tree to
-  `builds/sttree`, puts `sttest.s` in place of `userfw.s`, builds and flashes that debug firmware,
-  resets the ST through the sentinel so it runs the new cartridge code, and starts the tests with
-  the debug build's hidden `f` command. The ST reports each result as a `$7Fxx` command, which the setup terminal logs:
-  - T0: the return address into TOS the cartridge hands over, the machine and TOS, and on a
-    Mega STE its speed and cache at the handover, which must be the user's setting.
-  - T1: `d0 = 0` with Z set after each sender.
-  - T2: the registers each send keeps.
-  - T3 and T4: 100 small commands and 10 of 1 KB, none failed.
-  - T5 (`--oversize`): an oversize frame, then a command that must still be answered.
-  - T6 (`--long`): a burst of 3,000 commands of 1 KB, about 7 s.
-
-  On a Mega STE `--mste 8|16|16c` sets the speed and cache for the run, as a user would (the
-  test program turns the cache off around its sends, as any user firmware must, and puts the
-  setting back before its closing reboot). A reset brings the machine back to 8 MHz with no
-  cache, so the next handover reads that.
-
-  `--connect-race` instead resets the ST and the RP together, and times the ST's boot commands
-  against the RP's Wi-Fi connect. `--no-build --no-flash --no-reboot` runs the tests again at once
-  on an ST still in the setup menu from a run: with `download_harness.py --url ... --no-wait` just
-  before, the command path is tested while a download runs. The test firmware stays on the RP, so flash the real one
-  afterwards. The working tree is never touched.
-- `download_harness.py` downloads the files Booster downloads, on the device, and checks each by
-  MD5. The expected hashes are read at run time: F1 is `upgrade.bin` against `upgrade.md5`, F2 a
-  catalog microfirmware against the catalog's MD5, F3 the catalog itself, F4 a catalog entry behind
-  a GitHub redirect chain, and F5 a missing file, which must fail. PORT writes the port out, and
-  LONG is a URL past the build's limit, which must be refused. On an HTTPS build (`+https` in
-  the build ID) every case runs over http:// and https://; on an HTTP build `https://` must fail
-  as not built in. For a failure it checks the reason (`download_err_t`, read from `download.h`)
-  and that no file was left. The download runs in the debug-only `rp/src/devdownload.c`, through
-  `download.h` as an app would: the harness writes the URL into its RAM, starts it through the
-  devhooks mailbox (`DEVHOOKS_APP_DOWNLOAD`) and reads its state over SWD. It needs the SD card and Wi-Fi. `--url URL` downloads one URL and prints the outcome;
-  `--no-wait` starts it and frees the probe for another tool (to run `st_harness.py` during a
-  download), and `--status` reads the outcome later.
+- `tools_harness.py --channel` checks the tools against the command channel on a debug build:
+  ROM3 selected and given back with no ST (`app select`), injected commands and their answers,
+  `counters`, `ring`, a job run to its result (`job.py run dummy 2`), and the window whole test
+  data again after unselect (`swd.py window --pattern`); `--rounds N` adds N
+  select/hello/unselect rounds. Its full mode, without `--channel`, is the template's: it checks
+  `screen`, `text` and `key`, which this headless firmware refuses, and a SELECT press, which
+  here leaves for Booster, so it does not apply. `--build` also builds both types and checks
+  their flags and symbols, `--flash` flashes the debug build first.
+- Not imported (they drive what this firmware does not have): `st_harness.py`, which tested the
+  template's cartridge command path from the ST's side, and `download_harness.py`.
 
 ## Measuring builds
 
@@ -444,11 +404,7 @@ python3 tools/dev/download_harness.py                        # real downloads, c
   `-fcallgraph-info=su`, and reports the flash, RAM and heap numbers.
 - `stackdepth.py` computes worst-case stack depth from those builds (static call edges only, so
   treat its answer as a floor).
-- `tidy.sh [--build debug|release] [FILE ...]` runs clang-tidy with the repository's `.clang-tidy`
-  on the app's own sources (`emul.c`, `catalog.c`, `navlist.c`, `romstore.c`) or the files given,
-  relative to `rp/src`, using a `flash.sh --build-only` build's compile commands. They are
-  `arm-none-eabi-gcc`'s, so clang parses them as ARMv6-M with the toolchain's newlib as its sysroot;
-  without that every C library header is missing and the checks run on a broken parse. It reports
-  the files given and their own headers, and exits non-zero when anything was found.
+- clang-tidy runs in VS Code with the repository's `.clang-tidy`; the sibling's `tidy.sh` was not
+  imported.
 
 `logs/` and `builds/` are generated here and are gitignored.
