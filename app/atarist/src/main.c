@@ -286,7 +286,7 @@ static int reopen(void) {
   while (hw_ticks - start < REOPEN_TICKS) {
     if (cmd_select() == CMD_OK) break;
   }
-  return chscreen_open(machine.mch);
+  return chscreen_greet(machine.mch);
 }
 
 static void benchRequests(void) {

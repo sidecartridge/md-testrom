@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 
+#include "commands.h"
 #include "console.h"
 #include "diagnose.h"
 #include "hw.h"
@@ -35,26 +36,6 @@ unsigned long ltscreen_estimate(const LtSizes *sizes) {
   unsigned long reads = 0;
   for (int t = 0; t < LT_TESTS; t++) reads += 2 * lt_reads((LtTest)t, sizes);
   return reads / (1000000UL / US_PER_READ) + 1;
-}
-
-/* One frame of ROM3 reads, the template's way: each word is the low half of
- * an address read in ROM3, offset from its middle. One way: no answer. */
-static void sendFrame(unsigned short command, const unsigned short *words,
-                      int count) {
-  const volatile unsigned char *rom3 =
-      (const volatile unsigned char *)(MDTEST_ROM3_ADDRESS + 0x8000UL);
-  unsigned short size = (unsigned short)(4 + 2 * count);
-  unsigned short sum = (unsigned short)(command + size);
-  (void)rom3[(short)0xABCD];
-  (void)rom3[(short)command];
-  (void)rom3[(short)size];
-  (void)rom3[0];  /* the token: none, nothing answers */
-  (void)rom3[0];
-  for (int i = 0; i < count; i++) {
-    sum = (unsigned short)(sum + words[i]);
-    (void)rom3[(short)words[i]];
-  }
-  (void)rom3[(short)sum];
 }
 
 static void showFirstErrors(const DgBank *b) {
@@ -228,6 +209,6 @@ LtVerdict ltscreen_run(const LtSizes *sizes, unsigned long estimateSeconds) {
     result = stopped ? LT_STOPPED : LT_FAIL;
   }
   verdict[5] = runNumber;
-  sendFrame(MDTEST_CMD_LINE_VERDICT, verdict, MDTEST_VERDICT_WORDS);
+  cmd_sendOneWay(MDTEST_CMD_LINE_VERDICT, verdict, MDTEST_VERDICT_WORDS);
   return result;
 }

@@ -52,7 +52,8 @@ static int hello(long mch, CmdAnswer *a) {
   return 1;
 }
 
-int chscreen_open(long mch) {
+/* show: the hello's lines on the screen (and so in the report). */
+static int openChannel(long mch, int show) {
   CmdAnswer a;
   bootSeen = 0;
   restarted = 0;
@@ -80,10 +81,18 @@ int chscreen_open(long mch) {
   }
   /* From here every line also goes to the RP. */
   console_setMirror(cmd_log);
-  console_line(T_CH_HELLO);
-  console_line(T_CH_HELLO_DETAIL, firmware, a.boot);
+  if (show) {
+    console_line(T_CH_HELLO);
+    console_line(T_CH_HELLO_DETAIL, firmware, a.boot);
+  }
   return 1;
 }
+
+/* The hello is shown when the channel opens, not before every test that
+ * finds it open already. */
+int chscreen_open(long mch) { return openChannel(mch, !cmd_selected()); }
+
+int chscreen_greet(long mch) { return openChannel(mch, 1); }
 
 /* One echo of count words, checked; 1 when answered and right. */
 static int echo(unsigned long round, unsigned short count) {
@@ -254,7 +263,7 @@ ChVerdict chscreen_test(long mch) {
   bootSeen = 0;
   restarted = 0;
   wrongAnswers = 0;
-  if (!chscreen_open(mch)) return CH_NO_CHANNEL;
+  if (!chscreen_greet(mch)) return CH_NO_CHANNEL;
 
   CmdStats *s = cmd_stats();
   CmdStats before = *s;
