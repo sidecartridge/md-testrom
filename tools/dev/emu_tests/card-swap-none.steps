@@ -1,0 +1,13 @@
+# No card at the start: asked to put one in; none comes, and the wait ends.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+card out
+key r
+say "^  No card in the slot" 500
+say "^Put a microSD card in \(30 s\)" 100
+say "^FAIL  No card was seen coming in" 2500
+say "^  waited 30 s" 100

@@ -1,0 +1,24 @@
+# The device's identity and health, from the RP (a job): firmware, board,
+# clock, uptime, memory, why it last started, Booster's settings read only.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key i
+say "^Device information" 500
+say "^  Firmware  v[0-9.]+, build " 500
+say "^  Board     Pico W, ID [0-9A-F]{16}" 100
+say "^  Started   at power-on" 100
+say "^  Wi-Fi     " 100
+say "^PASS  The device reports no problem" 100
+log "ST\| PASS  The device reports no problem" 500
+# A second test from the menu finds the channel open: the device is greeted
+# once, on the screen and in the report.
+key i
+sayn 2 "^PASS  The device reports no problem" 500
+key s
+say "^Report saved on the microSD card as MDTEST-REPORT-00.TXT" 1500
+sdfile MDTEST-REPORT-00.TXT "^PASS  The device takes commands\.\r$"
+sdfilenot MDTEST-REPORT-00.TXT "(?s)The device takes commands.*The device takes commands"

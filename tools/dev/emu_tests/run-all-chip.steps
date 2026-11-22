@@ -1,0 +1,37 @@
+# The guided run with a silent radio chip: Wi-Fi fails, Bluetooth and the
+# LED are skipped with one explanation, SELECT and the card still run.
+@chipfail
+@sdapps
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key a
+say "^\[Q\] Quick, about \d+ min, or \[T\] thorough" 100
+key q
+say "^SKIP  Line test: gate overridden" 100
+say "^PASS  The command channel is clean" 40000
+say "^FAIL  The radio chip does not answer" 3000
+say "^SKIP  Bluetooth: the radio chip does not answer \(above\)" 600
+nosay "^Starting the Bluetooth controller"
+say "^Now the tests that need you" 600
+key y
+say "^Press SELECT on the device once" 300
+select 300
+say "^PASS  SELECT works" 600
+say "^SKIP  Green LED: the radio chip does not answer \(above\)" 600
+say "^Take the microSD card out" 600
+card out
+say "^Put the card back in" 600
+card in
+say "^PASS  The slot sees a card leave and come back" 600
+say "^  Wi-Fi         FAIL" 300
+say "^  Bluetooth     SKIP" 100
+say "^  SELECT        PASS" 100
+say "^  Green LED     SKIP" 100
+say "^  Card out/in   PASS" 100
+say "^\* The radio chip does not answer: no Wi-Fi, Bluetooth or LED" 100
+sayn 1 "^\* " 100
+nosay "^\* Everything tested works"

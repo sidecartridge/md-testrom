@@ -1,0 +1,21 @@
+# Two reports, two files on the microSD card; each holds the screen, CR LF,
+# 80 columns at most. The report travels over the command channel, so before
+# the gate opens it cannot be saved.
+@debug
+say "^Press a key" 100
+key s
+say "^WARN  The report cannot be saved yet" 300
+say "^Photograph the screen for support" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+key s
+say "^Saving the report on the microSD card" 300
+say "^Report saved on the microSD card as MDTEST-REPORT-00.TXT" 1500
+key s
+say "^Report saved on the microSD card as MDTEST-REPORT-01.TXT" 1500
+sdfile MDTEST-REPORT-00.TXT "\AMDTEST REPORT 1\r\nLine test: gate overridden \(debug build\)\.\r\n"
+sdfile MDTEST-REPORT-00.TXT "^PASS  The test microfirmware answers\.\r$"
+sdfile MDTEST-REPORT-00.TXT "^WARN  The report cannot be saved yet\.\r$"
+sdfile MDTEST-REPORT-01.TXT "^Report saved on the microSD card as MDTEST-REPORT-00\.TXT\.\r$"
+sdfile MDTEST-REPORT-01.TXT "\A(?:[^\n]{0,81}\n)*\Z"

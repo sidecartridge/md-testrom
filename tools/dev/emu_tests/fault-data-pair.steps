@@ -1,0 +1,7 @@
+# D1 and D14 swapped: two data lines that follow each other.
+@fault 3 1 14
+say "^Press a key" 100
+key x
+key l
+say "^ROM4:" 12000
+say "^FAIL  Data lines D1 and D14 are shorted" 100

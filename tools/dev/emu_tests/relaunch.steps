@@ -1,0 +1,13 @@
+# Quit: the computer restarts (asked once more), and the program starts again
+# from the AUTO folder: a run leaves nothing behind that the next trips on.
+@twice
+# A restart makes TOS 3.06 size and test the memory itself (Hatari's own start
+# skips that), and Hatari's TT with no TT-RAM answers its probe and then
+# faults its test, so the CPU halts: the TT's restart is the machine's to show.
+@skip tt-306 -- Hatari's TT halts in TOS 3.06's own memory test
+say "^Press a key" 100
+key x
+key q
+key q
+sayn 2 "^SidecarTridge" boot
+sayn 2 "^Press a key" 1500

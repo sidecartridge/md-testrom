@@ -1,0 +1,44 @@
+# A long session: more lines than a guided run (the report once kept 200
+# and dropped the rest without a word). Fifteen device-information runs, then
+# the report holds all fifteen.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key i
+sayn 1 "^PASS  The device reports no problem" 500
+key i
+sayn 2 "^PASS  The device reports no problem" 500
+key i
+sayn 3 "^PASS  The device reports no problem" 500
+key i
+sayn 4 "^PASS  The device reports no problem" 500
+key i
+sayn 5 "^PASS  The device reports no problem" 500
+key i
+sayn 6 "^PASS  The device reports no problem" 500
+key i
+sayn 7 "^PASS  The device reports no problem" 500
+key i
+sayn 8 "^PASS  The device reports no problem" 500
+key i
+sayn 9 "^PASS  The device reports no problem" 500
+key i
+sayn 10 "^PASS  The device reports no problem" 500
+key i
+sayn 11 "^PASS  The device reports no problem" 500
+key i
+sayn 12 "^PASS  The device reports no problem" 500
+key i
+sayn 13 "^PASS  The device reports no problem" 500
+key i
+sayn 14 "^PASS  The device reports no problem" 500
+key i
+sayn 15 "^PASS  The device reports no problem" 500
+key s
+say "^Report saved on the microSD card as MDTEST-REPORT-00.TXT" 1500
+sdfile MDTEST-REPORT-00.TXT "(?s)(^Device information\r$.*){15}"
+sdfile MDTEST-REPORT-00.TXT "(?s)(^PASS  The device reports no problem\.\r$.*){15}"
+sdfilenot MDTEST-REPORT-00.TXT "report is full"

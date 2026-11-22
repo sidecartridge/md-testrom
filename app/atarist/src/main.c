@@ -1,635 +1,605 @@
-#include <sys/types.h>
+/*
+ * MDTEST.TOS: tests a SidecarTridge Multi-device from the Atari.
+ *
+ * It identifies the machine, recognises what is in the cartridge port from
+ * plain reads of the window (common/mdtest.h), and shows the tests. It runs
+ * without TOS once started (hw.c): its own screen, keyboard and clock, 80
+ * columns on every machine; quitting restarts the computer, so it does not
+ * belong in the AUTO folder.
+ */
 #include <stdio.h>
+#include <string.h>
 
-#include <time.h>
+#include "chscreen.h"
+#include "commands.h"
+#include "console.h"
+#include "devscreen.h"
+#include "device.h"
+#include "ltscreen.h"
+#include "hw.h"
+#include "machine.h"
+#include "mdtest.h"
+#include "report.h"
+#include "summary.h"
+#include "texts.h"
 
-#include "screen.h"
-
-#define ROM_MEMORY_START 0xFA0000;
-#define ROM4_MEMORY_START ROM_MEMORY_START
-#define ROM3_MEMORY_START ROM_MEMORY_START + 0x20000
-#define ROM4_BANK 0
-#define ROM3_BANK 1
-#define ROM_SIZE_BYTES 128 * 1024
-#define ROM_SIZE_WORDS ROM_SIZE_BYTES / 2
-#define ROMBANK_SIZE_BYTES 64 * 1024
-#define ROMBANK_SIZE_WORDS ROMBANK_SIZE_BYTES / 2
-
-#ifdef _DEBUG
-#define TEST_ROM_FILE "HATARROM.BIN"
-#define RANDOM_ACCESS_ITERATIONS 1000
-#define ADDRESS_LINE_ITERATIONS 1000
-#else
-#define TEST_ROM_FILE "TESTROM.BIN"
-#define RANDOM_ACCESS_ITERATIONS 1000000
-#define ADDRESS_LINE_ITERATIONS 1000000
+/* The window layout this program reads; a test build overrides it to show
+ * a version mismatch. */
+#ifndef PROGRAM_LAYOUT_VERSION
+#define PROGRAM_LAYOUT_VERSION MDTEST_LAYOUT_VERSION
 #endif
 
-const int SPINNER_UPDATE_FREQUENCY = 4096;
-char spinner[] = {'\\', '|', '/', '-'};
+static Machine machine;
+static Device device;
+/* The gate: the device tests run only once the line test and then the
+ * command channel's test have passed (or, on a debug build, the gate was
+ * overridden), for this session. */
+static int linePassed;
+static int channelPassed;
+static int unlocked;
+static int overridden;
 
-int testDifferentVersions(unsigned char *rom_data)
-{
-    // Check if the content of the version string is the same in the ROM
-    // and in the executable
+#define MSTE_SPEED_CACHE (*(volatile unsigned char *)0xFF8E21)
+#define KEY_ESC 27
+#define KEY_RETURN 13
+#define MENU_RESULT_COLUMN 50
 
-    printf("- Testing version string...  ");
+/* Each test's last result, beside it in the menu: by its key. */
+static const char *lastResult[26];
 
-    // Create a buffer to store the version from the ROM
-    char rom_version[12]; // 11 characters + null terminator
-    memcpy(rom_version, &rom_data[4], 11);
-    rom_version[11] = '\0'; // Null terminate the string
+static void setResult(int key, const char *result) {
+  if (key >= 'a' && key <= 'z') lastResult[key - 'a'] = result;
+}
 
-    if (strcmp(rom_version, VERSION) != 0)
-    {
-        printf("\r\n    x Error: ROM version string mismatch. Expected: %s, got: %s\r\n", VERSION, rom_version);
-        return 1;
-    }
+static const char *outcomeWord(Outcome o) {
+  switch (o) {
+    case OUT_PASS:
+      return T_OUT_PASS;
+    case OUT_WARN:
+      return T_OUT_WARN;
+    case OUT_FAIL:
+      return T_OUT_FAIL;
+    case OUT_SKIP:
+      return T_OUT_SKIP;
+    case OUT_STOPPED:
+      return T_OUT_STOPPED;
+    default:
+      return 0;
+  }
+}
 
-    printf("Matches: %s.\r\n", VERSION);
+static void showMachine(void) {
+  char cpu[8];
+  sprintf(cpu, T_CPU, (int)machine.cpu);
+  console_line(T_MACHINE, machine_name(&machine), cpu, machine.tos >> 8,
+               machine.tos & 0xFF);
+  console_line(T_MACHINE_DETAIL, (unsigned)(machine.tosDate & 0xFFFF),
+               (unsigned)(machine.tosDate >> 24),
+               (unsigned)((machine.tosDate >> 16) & 0xFF));
+  console_line(T_MACHINE_SCREEN, machine_screen(&machine),
+               machine.mch == -1 ? T_NO_COOKIE_JAR : "");
+  console_line(T_MACHINE_RAM, machine.stRam / 1024);
+  if (machine.ttRam) console_line(T_MACHINE_TTRAM, machine.ttRam / 1024);
+  if (machine_isMegaSte(&machine)) {
+    console_line(T_MACHINE_MSTE, machine.msteFast ? "16" : "8",
+                 machine.msteCache ? "on" : "off");
+  }
+}
+
+/* Says what is in the port; true when the line test can run. */
+static int showDevice(void) {
+  switch (device.kind) {
+    case DEVICE_NONE:
+      console_line(T_DEVICE_NONE);
+      console_line(T_FOUND_NONE);
+      console_line(T_FOUND_NONE_DETAIL);
+      console_line(T_FOUND_NONE_ADVICE);
+      console_line(T_FOUND_NONE_LINE);
+      return 1;
+    case DEVICE_OTHER:
+      console_line(T_DEVICE_OTHER);
+      console_line(T_FOUND_OTHER);
+      console_line(T_FOUND_OTHER_DETAIL);
+      console_line(T_FOUND_OTHER_ADVICE);
+      return 0;
+    case DEVICE_OLD:
+      console_line(T_DEVICE_OLD, device.version);
+      console_line(T_FOUND_OLD);
+      console_line(T_FOUND_OLD_ADVICE, VERSION);
+      return 0;
+    case DEVICE_TEST_DAMAGED:
+      console_line(T_DEVICE_DAMAGED);
+      console_line(T_FOUND_DAMAGED);
+      console_line(T_FOUND_DAMAGED_DETAIL);
+      console_line(T_FOUND_RUN_LINE);
+      return 1;
+    case DEVICE_TEST:
+      break;
+  }
+  console_line(T_DEVICE_TEST, device.version);
+  console_line(T_DEVICE_TEST_DETAIL, device.layout, device.build);
+  if (device.layout != PROGRAM_LAYOUT_VERSION) {
+    int firmwareOlder = device.layout < PROGRAM_LAYOUT_VERSION;
+    console_line(firmwareOlder ? T_FOUND_LAYOUT_OLD : T_FOUND_LAYOUT_NEW);
+    console_line(T_FOUND_LAYOUT_DETAIL, device.layout,
+                 (unsigned)PROGRAM_LAYOUT_VERSION);
+    console_line(firmwareOlder ? T_FOUND_UPDATE_FIRMWARE
+                               : T_FOUND_UPDATE_PROGRAM);
     return 0;
+  }
+  if (device.state != MDTEST_STATE_DATA) {
+    console_line(T_FOUND_COMMANDS);
+    console_line(T_FOUND_COMMANDS_DETAIL, device.state);
+    if (cmd_unselect() != CMD_OK) console_line(T_CH_UNSELECT_FAIL);
+  }
+  console_line(T_FOUND_OK);
+  return 1;
 }
 
-/**
- * Tests if the data read sequentially from ROM 4 matches the expected data.
- *
- * This function compares 16-bit words from the `rom_data` to the expected words
- * in `file_data`. If any mismatch is found, it prints an error message with the
- * address of the mismatch and the expected vs. actual data.
- *
- * @param rom_data A pointer to the start address of the data read from ROM 4.
- * @param file_data A pointer to the start address of the expected data.
- * @param rombank The ROM bank number to be tested. Use the constants ROM4_BANK and ROM3_BANK.
- * @return Returns 0 if all data matches, 1 if a mismatch is found.
- */
-int testSequentialReadROM(unsigned char *rom_data, unsigned char *file_data, int rombank)
-{
-    printf("- Testing sequential read ROM %s...  ", rombank == ROM4_BANK ? "4" : "3");
-    __uint16_t *rom_data_words = (__uint16_t *)rom_data;   // Assuming rom_data was previously defined as unsigned char*
-    __uint16_t *file_data_words = (__uint16_t *)file_data; // Assuming file_data was previously defined as unsigned char*
-    rom_data_words += rombank * ROMBANK_SIZE_WORDS;        // Move the pointer to the start of the ROM bank
-    file_data_words += rombank * ROMBANK_SIZE_WORDS;       // Move the pointer to the start of the ROM bank in the file
-    for (int i = 0; i < ROMBANK_SIZE_WORDS; i++)
-    {
-        __uint16_t rom_word = rom_data_words[i];
-        __uint16_t file_word = file_data_words[i];
-        if (rom_word != file_word)
-        {
-            unsigned long real_memory = rombank * ROMBANK_SIZE_BYTES + ROM4_MEMORY_START;
-            real_memory += i * 2;
-            printf("\r\n    x Error: Data mismatch at address %p. Expected: %p, got: %p\r\n", real_memory, file_word, rom_word);
-            return 1;
-        }
-        if (i % SPINNER_UPDATE_FREQUENCY == 0)
-        {
-            printf("\b%c", spinner[(i / SPINNER_UPDATE_FREQUENCY) % 4]);
-        }
+/* The menu's entries, in order: each with its key (0 for a line that is not
+ * a test). */
+typedef struct {
+  int key;
+  const char *text;
+} MenuEntry;
+
+static int menuEntries(int lineTestReady, MenuEntry *e) {
+  int n = 0;
+  if (lineTestReady) {
+    e[n++] = (MenuEntry){'a', T_MENU_RUN_ALL};
+    e[n++] = (MenuEntry){'l', T_MENU_LINE};
+    e[n++] = (MenuEntry){'k', T_MENU_LINE_LONG};
+    if (machine_isMegaSte(&machine)) e[n++] = (MenuEntry){'m', T_MENU_LINE_MSTE};
+  } else {
+    e[n++] = (MenuEntry){0, T_MENU_LINE_OFF};
+  }
+  if (linePassed || overridden) e[n++] = (MenuEntry){'c', T_MENU_CHANNEL};
+  if (unlocked) {
+    e[n++] = (MenuEntry){'i', T_MENU_INFO};
+    e[n++] = (MenuEntry){'p', T_MENU_SELECT};
+    e[n++] = (MenuEntry){'g', T_MENU_LED};
+    e[n++] = (MenuEntry){'d', T_MENU_CARD};
+    e[n++] = (MenuEntry){'r', T_MENU_CARD_SWAP};
+    e[n++] = (MenuEntry){'w', T_MENU_WIFI};
+    e[n++] = (MenuEntry){'t', T_MENU_BT};
+  } else if (linePassed) {
+    e[n++] = (MenuEntry){0, T_MENU_LOCKED1};
+    e[n++] = (MenuEntry){0, T_MENU_CHANNEL_NEXT};
+  } else {
+    e[n++] = (MenuEntry){0, T_MENU_LOCKED1};
+    e[n++] = (MenuEntry){0, T_MENU_LOCKED2};
+  }
+#ifdef MDTEST_DEBUG
+  if (!unlocked) e[n++] = (MenuEntry){'o', T_MENU_OVERRIDE};
+#endif
+  if (device.kind == DEVICE_TEST) e[n++] = (MenuEntry){'b', T_MENU_EXIT};
+  e[n++] = (MenuEntry){'s', T_MENU_SAVE};
+  e[n++] = (MenuEntry){'q', T_MENU_QUIT};
+  return n;
+}
+
+/* The menu as a panel: the body cleared, each entry with its test's last
+ * result. Screen only. */
+static void drawMenu(int lineTestReady) {
+  MenuEntry e[24];
+  int n = menuEntries(lineTestReady, e);
+  char title[48];
+  snprintf(title, sizeof(title), T_TITLE, VERSION);
+  console_screen(title, 0);
+  for (int i = 0; i < n; i++) {
+    int row = console_bodyRow();
+    console_at(2, row, e[i].text);
+    const char *result = e[i].key ? lastResult[e[i].key - 'a'] : 0;
+    if (result) console_at(MENU_RESULT_COLUMN, row, result);
+    console_bodyFrom(row + 1);
+  }
+  console_status(T_MENU_PROMPT, T_MENU_STATUS_RIGHT);
+}
+
+/* The menu's lines for the report and the host's log, as every earlier
+ * version wrote them; drawn as the panel only when asked (at the start, and
+ * on Space), so a test's results stay on the screen until then. */
+static void showMenu(int lineTestReady, int draw) {
+  MenuEntry e[24];
+  int n = menuEntries(lineTestReady, e);
+  console_record("");
+  for (int i = 0; i < n; i++) console_record("%s", e[i].text);
+  console_record(T_MENU_PROMPT);
+  if (draw) {
+    drawMenu(lineTestReady);
+  } else {
+    console_status(T_MENU_AFTER_TEST, T_MENU_STATUS_RIGHT);
+  }
+}
+
+/* ROM3 as data again before any read of it: the mirror stops with it. */
+static void giveBackRom3(void) {
+  console_setMirror(0);
+  if (cmd_selected() && cmd_unselect() != CMD_OK) {
+    console_line(T_CH_UNSELECT_FAIL);
+  }
+}
+
+/* The device tests need the command channel's test too: the line test
+ * unlocks them only when that one has already passed. */
+static void lineTestPassed(void) {
+  int was = unlocked;
+  linePassed = 1;
+  unlocked = overridden || (linePassed && channelPassed);
+  if (unlocked && !was) console_line(T_GATE_UNLOCKED);
+}
+
+static void lineTest(int key, const LtSizes *sizes) {
+  giveBackRom3();
+  LtVerdict v = ltscreen_run(sizes, ltscreen_estimate(sizes));
+  setResult(key, v == LT_PASS     ? T_OUT_PASS
+                 : v == LT_FAIL   ? T_OUT_FAIL
+                                  : T_OUT_STOPPED);
+  if (v == LT_PASS) lineTestPassed();
+}
+
+static void channelTest(void) {
+  ChVerdict v = chscreen_test(machine.mch);
+  channelPassed = v == CH_CLEAN || v == CH_RETRIES;
+  setResult('c', v == CH_CLEAN     ? T_OUT_PASS
+                 : v == CH_RETRIES ? T_OUT_WARN
+                                   : T_OUT_FAIL);
+  unlocked = overridden || (linePassed && channelPassed);
+  if (channelPassed && unlocked) console_line(T_GATE_UNLOCKED);
+}
+
+/* The quick pass at each Mega STE setting; the user's is put back. */
+static void lineTestMegaSte(void) {
+  static const unsigned char settings[3] = {0x00, 0x02, 0x03};
+  unsigned char saved = MSTE_SPEED_CACHE;
+  int passes = 0;
+  giveBackRom3();
+  for (int i = 0; i < 3; i++) {
+    MSTE_SPEED_CACHE = (unsigned char)((saved & 0xFC) | settings[i]);
+    console_blank();
+    console_line(T_LINE_MSTE, settings[i] & 2 ? "16" : "8",
+                 settings[i] & 1 ? "on" : "off");
+    if (ltscreen_run(&lt_quick, ltscreen_estimate(&lt_quick)) == LT_PASS) {
+      passes++;
     }
-    printf("\bSuccess.\r\n");
+  }
+  MSTE_SPEED_CACHE = saved;
+  setResult('m', passes == 3 ? T_OUT_PASS : T_OUT_FAIL);
+  if (passes == 3) lineTestPassed();
+}
+
+static int keyPressed(void) { return console_keyPressed(); }
+
+static void waitTicks(unsigned long ticks) {
+  unsigned long start = hw_ticks;
+  while (hw_ticks - start < ticks) {
+  }
+}
+
+/* The RP's requests, polled until it says stop or a key is pressed. */
+/* An RP that started again serves ROM3 as data once it is up, seconds after
+ * the reset: select it again, for as long as a boot takes. */
+#define REOPEN_TICKS (200UL * 10)
+
+static int reopen(void) {
+  unsigned long start = hw_ticks;
+  while (hw_ticks - start < REOPEN_TICKS) {
+    if (cmd_select() == CMD_OK) break;
+  }
+  return chscreen_greet(machine.mch);
+}
+
+static void benchRequests(void) {
+  console_line(T_BENCH_REQUESTS);
+  if (!chscreen_open(machine.mch)) return;
+  while (!keyPressed()) {
+    CmdAnswer a;
+    waitTicks(50);
+    if (cmd_request(&a) != CMD_OK) {
+      if (!cmd_selected() && !reopen()) return;
+      continue;
+    }
+    if (a.data[0] == MDTEST_REQUEST_RUN) {
+      console_line(T_BENCH_RUN_TEST, a.data[1]);
+      chscreen_job(a.data[1], &a.data[2]);
+      console_line(T_BENCH_DONE);
+    } else if (a.data[0] == MDTEST_REQUEST_LINE_TEST) {
+      giveBackRom3();
+      ltscreen_run(&lt_quick, ltscreen_estimate(&lt_quick));
+      if (!chscreen_open(machine.mch)) return;
+      console_line(T_BENCH_DONE);
+    } else if (a.data[0] == MDTEST_REQUEST_CHANNEL_TEST) {
+      chscreen_test(machine.mch);
+      if (!cmd_selected() && !reopen()) return;
+      console_line(T_BENCH_DONE);
+    } else if (a.data[0] == MDTEST_REQUEST_STOP) {
+      console_line(T_BENCH_STOP);
+      break;
+    }
+  }
+  giveBackRom3();
+}
+
+/* Bench mode, asked for in the window's header (a debug or EmuMD firmware):
+ * the line test in a loop, each verdict sent to the RP, until a key; or the
+ * RP's requests. */
+static int benchMode(void) {
+  int mode = device.bench;
+  if (mode == MDTEST_BENCH_NONE || mode > MDTEST_BENCH_COMMANDS) return 0;
+#ifndef MDTEST_DEBUG
+  if (mode == MDTEST_BENCH_COMMANDS) mode = MDTEST_BENCH_LINE;
+#endif
+  if (mode == MDTEST_BENCH_COMMANDS) {
+    console_line(T_BENCH_SKIP);
+    benchRequests();
+    return 1;
+  }
+  console_line(T_BENCH);
+  for (unsigned long run = 1; !keyPressed(); run++) {
+    console_line(T_BENCH_RUN, run);
+    LtVerdict v = ltscreen_run(&lt_quick, ltscreen_estimate(&lt_quick));
+    if (mode == MDTEST_BENCH_REQUESTS && v == LT_PASS) {
+      benchRequests();
+      return 1;
+    }
+  }
+  return 1;
+}
+
+/* The guided run ([A]): the line test, the command channel, then the
+ * device tests, each layer only once the one under it passed; the tests
+ * that need the user only if they say so; then the summary. A key between
+ * two tests (or during the line test) stops it with what it has. */
+#define RUN_DEVICE_SECONDS 40UL /* the channel's test and the device tests: 38 s on a Mega ST */
+#define HZ_200 hw_ticks
+
+static Results results;
+
+/* The summary as a panel of its own: its title starts a new screen. */
+static void putSummary(const char *line, void *ctx) {
+  int *started = ctx;
+  if (!*started) {
+    if (line[0] == '\0') return; /* the blank before the title */
+    if (!strcmp(line, T_SUM_TITLE)) {
+      console_page(T_SUM_TITLE);
+      *started = 1;
+      return;
+    }
+  }
+  console_line("%s", line);
+}
+
+/* A key pressed since the last test: this area and the rest stopped. */
+static int stoppedAt(Area area) {
+  if (!keyPressed()) return 0;
+  console_line(T_RUN_STOPPED);
+  results.outcome[area] = OUT_STOPPED;
+  return 1;
+}
+
+static void runDevice(Area area, void (*test)(void)) {
+  static const char areaKeys[AREA_COUNT] = {'l', 'c', 'i', 'd', 'w',
+                                            't', 'p', 'g', 'r'};
+  test();
+  devscreen_verdict(&results.outcome[area], &results.reason[area]);
+  setResult(areaKeys[area], outcomeWord(results.outcome[area]));
+}
+
+/* A test the silent radio chip makes meaningless: said once, skipped. */
+static int radioSilent(Area area, const char *name) {
+  if (results.reason[AREA_WIFI] != R_CHIP_SILENT &&
+      results.reason[AREA_BLUETOOTH] != R_CHIP_SILENT) {
     return 0;
+  }
+  console_blank();
+  console_line(T_RUN_SKIP_RADIO, name);
+  results.outcome[area] = OUT_SKIP;
+  results.reason[area] = R_CHIP_SILENT;
+  return 1;
 }
 
-/**
- * Tests if the data read sequentially from ROM matches the expected data.
- *
- * This function compares 16-bit words from the `rom_data` to the expected words
- * in `file_data`. If any mismatch is found, it keeps track of the mismatches without printing immediately.
- *
- * @param rom_data A pointer to the start address of the data read from ROM.
- * @param file_data A pointer to the start address of the expected data.
- * @param rombank The ROM bank number to be tested. Use the constants ROM4_BANK and ROM3_BANK.
- * @return Returns 0 if all data matches, 1 if there were mismatches.
- */
-int testSequentialReadROMStats(unsigned char *rom_data, unsigned char *file_data, int rombank)
-{
-    int successful_requests = 0;
-    int failed_requests = 0;
+static void runTests(const LtSizes *sizes) {
+  for (int i = 0; i < AREA_COUNT; i++) results.outcome[i] = OUT_LOCKED;
 
-    printf("- Testing stats seq read ROM %s...  ", rombank == ROM4_BANK ? "4" : "3");
-
-    __uint16_t *rom_data_words = (__uint16_t *)rom_data;
-    __uint16_t *file_data_words = (__uint16_t *)file_data;
-    rom_data_words += rombank * ROMBANK_SIZE_WORDS;
-    file_data_words += rombank * ROMBANK_SIZE_WORDS;
-
-    for (int i = 0; i < ROMBANK_SIZE_WORDS; i++)
-    {
-        __uint16_t rom_word = rom_data_words[i];
-        __uint16_t file_word = file_data_words[i];
-
-        if (rom_word != file_word)
-        {
-            failed_requests++;
-        }
-        else
-        {
-            successful_requests++;
-        }
-
-        if (i % SPINNER_UPDATE_FREQUENCY == 0)
-        {
-            printf("\b%c", spinner[(i / SPINNER_UPDATE_FREQUENCY) % 4]);
-        }
+  if (overridden) {
+    console_blank();
+    console_line(T_RUN_OVERRIDDEN);
+    results.outcome[AREA_LINES] = OUT_SKIP;
+  } else {
+    giveBackRom3();
+    LtVerdict v = ltscreen_run(sizes, ltscreen_estimate(sizes));
+    if (v == LT_STOPPED) {
+      results.outcome[AREA_LINES] = OUT_STOPPED;
+      return;
     }
+    if (v != LT_PASS) {
+      results.outcome[AREA_LINES] = OUT_FAIL;
+      results.reason[AREA_LINES] = R_LINES;
+      console_line(T_RUN_GATE_LINES);
+      return;
+    }
+    results.outcome[AREA_LINES] = OUT_PASS;
+    setResult('l', T_OUT_PASS);
+    lineTestPassed();
+  }
+  if (stoppedAt(AREA_COMMANDS)) return;
 
-    printf("\bSuccess: %d, Fail: %d\r\n",
-           successful_requests,
-           failed_requests);
+  channelTest();
+  if (!channelPassed) {
+    results.outcome[AREA_COMMANDS] = OUT_FAIL;
+    results.reason[AREA_COMMANDS] =
+        machine_isMegaSte(&machine) && machine.msteFast && machine.msteCache
+            ? R_CMD_CACHE
+            : R_CMD;
+    console_line(T_RUN_GATE_CHANNEL);
+    return;
+  }
+  results.outcome[AREA_COMMANDS] = OUT_PASS;
+  for (int i = AREA_DEVICE; i < AREA_COUNT; i++) results.outcome[i] = OUT_NOT_RUN;
+  /* The channel's test left it open: opening it again would say hello twice. */
+  if (!cmd_selected() && !chscreen_open(machine.mch)) {
+    results.outcome[AREA_DEVICE] = OUT_FAIL;
+    results.reason[AREA_DEVICE] = R_LOST;
+    return;
+  }
 
-    return failed_requests > 0 ? 1 : 0;
+  if (stoppedAt(AREA_DEVICE)) return;
+  runDevice(AREA_DEVICE, devscreen_info);
+  if (stoppedAt(AREA_CARD)) return;
+  runDevice(AREA_CARD, devscreen_card);
+  if (stoppedAt(AREA_WIFI)) return;
+  runDevice(AREA_WIFI, devscreen_wifi);
+  if (stoppedAt(AREA_BLUETOOTH)) return;
+  if (!radioSilent(AREA_BLUETOOTH, T_AREA_BLUETOOTH)) {
+    runDevice(AREA_BLUETOOTH, devscreen_bluetooth);
+  }
+
+  if (stoppedAt(AREA_SELECT)) return;
+  console_blank();
+  console_line(T_RUN_ASK_HANDS);
+  int key;
+  do {
+    key = console_key();
+  } while (key != 'y' && key != 'n');
+  console_line(key == 'y' ? T_YES : T_NO);
+  if (key != 'y') return;
+  runDevice(AREA_SELECT, devscreen_select);
+  if (stoppedAt(AREA_LED)) return;
+  if (!radioSilent(AREA_LED, T_AREA_LED)) runDevice(AREA_LED, devscreen_led);
+  if (stoppedAt(AREA_CARD_SWAP)) return;
+  runDevice(AREA_CARD_SWAP, devscreen_cardSwap);
 }
 
-/**
- * Tests if randomly accessed data from ROM matches the expected data.
- *
- * This function randomly selects positions within the ROM data and compares
- * 16-bit words from the `rom_data` to the expected words in `file_data`.
- * If any mismatch is found, it prints an error message with the address of
- * the mismatch and the expected vs. actual data.
- *
- * @param rom_data A pointer to the start address of the data read from ROM.
- * @param file_data A pointer to the start address of the expected data.
- * @param rombank The ROM bank number to be tested. Use constants like ROM4_BANK and ROM3_BANK.
- * @param num_requests The number of random access requests to be performed.
- * @return Returns 0 if all data matches, 1 if a mismatch is found.
- */
-int testRandomReadROM(unsigned char *rom_data, unsigned char *file_data, int rombank, int num_requests)
-{
-    printf("- Testing %i random access from ROM %s...  ", num_requests, rombank == ROM4_BANK ? "4" : "3");
-
-    __uint16_t *rom_data_words = (__uint16_t *)rom_data;
-    __uint16_t *file_data_words = (__uint16_t *)file_data;
-    rom_data_words += rombank * ROMBANK_SIZE_WORDS;
-    file_data_words += rombank * ROMBANK_SIZE_WORDS;
-
-    srand(Random()); // Initialize random seed
-
-    for (int i = 0; i < num_requests; i++)
-    {
-        unsigned long random_position = rand() & 0x7FFF; // Mask the value to be within the ROM size in words
-
-        __uint16_t rom_word = rom_data_words[random_position];
-        __uint16_t file_word = file_data_words[random_position];
-
-        if (rom_word != file_word)
-        {
-            unsigned long real_memory = rombank * ROMBANK_SIZE_BYTES + ROM4_MEMORY_START;
-            real_memory += random_position * 2;
-            printf("\r\n    x Error: Data mismatch at %p. Expected: %p, got: %p\r\n", real_memory, file_word, rom_word);
-            return 1;
-        }
-
-        if (i % SPINNER_UPDATE_FREQUENCY == 0)
-        {
-            printf("\b%c", spinner[(i / SPINNER_UPDATE_FREQUENCY) % 4]);
-        }
-    }
-
-    printf("\bSuccess.\r\n");
-    return 0;
+static void runAll(void) {
+  unsigned long quick = ltscreen_estimate(&lt_quick) + RUN_DEVICE_SECONDS;
+  unsigned long thorough = ltscreen_estimate(&lt_long) + RUN_DEVICE_SECONDS;
+  console_page(T_RUN_TITLE);
+  console_line(T_RUN_CHOOSE, (quick + 59) / 60, (thorough + 59) / 60);
+  int key;
+  do {
+    key = console_key();
+  } while (key != 'q' && key != 't' && key != KEY_ESC);
+  if (key == KEY_ESC) return;
+  console_line(T_RUN_STOP_HINT);
+  console_status(T_RUN_STOP_HINT, 0);
+  unsigned long start = HZ_200;
+  summary_clear(&results);
+  runTests(key == 't' ? &lt_long : &lt_quick);
+  giveBackRom3();
+  int started = 0;
+  summary_write(&results, putSummary, &started);
+  console_line(T_RUN_TOOK, (HZ_200 - start) / 200);
 }
 
-/**
- * Tests if randomly accessed data from ROM matches the expected data and outputs stats.
- *
- * This function randomly selects positions within the ROM data and compares
- * 16-bit words from the `rom_data` to the expected words in `file_data`.
- * Instead of printing mismatches immediately, it keeps track of successful
- * and failed requests and prints a summary at the end.
- *
- * @param rom_data A pointer to the start address of the data read from ROM.
- * @param file_data A pointer to the start address of the expected data.
- * @param rombank The ROM bank number to be tested. Use constants like ROM4_BANK and ROM3_BANK.
- * @param num_requests The number of random access requests to be performed.
- * @return Returns 0 if all data matches, 1 if there were mismatches.
- */
-int testRandomReadROMStats(unsigned char *rom_data, unsigned char *file_data, int rombank, int num_requests)
-{
-    int successful_requests = 0;
-    int failed_requests = 0;
-
-    printf("- Testing stats %i random access ROM %s...  ", num_requests, rombank == ROM4_BANK ? "4" : "3");
-
-    __uint16_t *rom_data_words = (__uint16_t *)rom_data;
-    __uint16_t *file_data_words = (__uint16_t *)file_data;
-    rom_data_words += rombank * ROMBANK_SIZE_WORDS;
-    file_data_words += rombank * ROMBANK_SIZE_WORDS;
-
-    srand(Random()); // Initialize random seed
-
-    for (int i = 0; i < num_requests; i++)
-    {
-        unsigned long random_position = rand() & 0x7FFF; // Mask the value to be within the ROM size in words
-
-        __uint16_t rom_word = rom_data_words[random_position];
-        __uint16_t file_word = file_data_words[random_position];
-
-        if (rom_word != file_word)
-        {
-            failed_requests++;
-        }
-        else
-        {
-            successful_requests++;
-        }
-
-        if (i % SPINNER_UPDATE_FREQUENCY == 0)
-        {
-            printf("\b%c", spinner[(i / SPINNER_UPDATE_FREQUENCY) % 4]);
-        }
-    }
-
-    printf("\bSuccess: %d, Fail: %d\r\n",
-           successful_requests,
-           failed_requests);
-
-    return failed_requests > 0 ? 1 : 0;
+/* Quit: the computer restarts (nothing of TOS is left to return to). Asked
+ * once more on the bottom line, so a stray Q does not lose the session. */
+static int confirmQuit(void) {
+  console_status(T_QUIT_CONFIRM, 0);
+  return console_key() == 'q';
 }
 
-/**
- * Tests if the data read from ROM by setting individual address lines high matches the expected data.
- *
- * This function sets individual address lines high (from A0 to A15) and reads the data
- * from `rom_data` and compares it to the expected data in `file_data`.
- *
- * @param rom_data A pointer to the start address of the data read from ROM.
- * @param file_data A pointer to the start address of the expected data.
- * @param rombank The ROM bank number to be tested. Use the constants ROM4_BANK and ROM3_BANK.
- * @param num_requests The number of times each address line is tested.
- * @return Returns 0 if all data matches, 1 if a mismatch is found.
- */
-int testAddressLinesSequentialReadROM(unsigned char *rom_data, unsigned char *file_data, int rombank, int num_requests)
-{
-    printf("- Testing addr lines seq read ROM %s with %d req x line...  ", rombank == ROM4_BANK ? "4" : "3", num_requests);
-
-    __uint16_t *rom_data_words = (__uint16_t *)rom_data;
-    __uint16_t *file_data_words = (__uint16_t *)file_data;
-    rom_data_words += rombank * ROMBANK_SIZE_WORDS;
-    file_data_words += rombank * ROMBANK_SIZE_WORDS;
-
-    // Can't read from A0 high, so start at A1
-    for (int line = 1; line < 15; line++) // Loop over each address line
-    {
-        for (int request = 0; request < num_requests; request++)
-        {
-            int address = 1 << line;                              // This will set the current line high and all other lines low
-            __uint16_t rom_word = rom_data_words[address >> 1];   // Divide by 2 to get the word address
-            __uint16_t file_word = file_data_words[address >> 1]; // Divide by 2 to get the word address
-            if (rom_word != file_word)
-            {
-                unsigned long real_memory = rombank * ROMBANK_SIZE_BYTES + ROM4_MEMORY_START;
-                real_memory += address;
-                printf("\r\n    x Error: Data mismatch at %p with only A%d high. Expected: %p, got: %p\r\n", real_memory, line, file_word, rom_word);
-                return 1;
-            }
-        }
-
-        // Spinner update
-        if (line % SPINNER_UPDATE_FREQUENCY == 0)
-        {
-            printf("\b%c", spinner[(line / SPINNER_UPDATE_FREQUENCY) % 4]);
-        }
-    }
-
-    printf("\bSuccess.\r\n");
-    return 0;
+static void restart(int giveBack) {
+  if (giveBack) giveBackRom3();
+  console_record(T_QUIT_RESTART);
+  console_status(T_QUIT_RESTART, 0);
+  hw_restart();
 }
 
-/**
- * Compares sequential byte data read from ROM to expected data.
- *
- * This function performs a byte-by-byte comparison between the data read
- * from a specified ROM bank and the expected data provided. If a mismatch
- * is detected, an error message is displayed indicating the memory address
- * of the mismatch, along with the expected and actual byte values.
- *
- * @param rom_data   A pointer to the start address of the data read from ROM.
- * @param file_data  A pointer to the start address of the expected data.
- * @param rombank    The ROM bank number to be tested (e.g., ROM4_BANK, ROM3_BANK).
- * @return           Returns 0 if all data matches, 1 if a mismatch is found.
- */
-int testSequentialReadROMBytes(unsigned char *rom_data, unsigned char *file_data, int rombank)
-{
-    printf("- Testing seq read bytes ROM %s...  ", rombank == ROM4_BANK ? "4" : "3");
+static void run(void) {
+  char machineText[48];
+  char cpu[8];
+  console_init();
+  sprintf(cpu, T_CPU, (int)machine.cpu);
+  snprintf(machineText, sizeof(machineText), T_TITLE_MACHINE,
+           machine_name(&machine), cpu, machine.tos >> 8, machine.tos & 0xFF);
+  console_setMachine(machineText);
+  char title[48];
+  snprintf(title, sizeof(title), T_TITLE, VERSION);
+  console_title(title, machineText);
+  console_line(T_TITLE, VERSION);
+  showMachine();
+  cmd_init(machine.mch, machine_isMegaSte(&machine));
+  device_recognise(&device);
+  int ready = showDevice();
+  if (device.kind == DEVICE_TEST) {
+    char text[80];
+    snprintf(text, sizeof(text), T_DEVICE_BAR, device.version, device.build);
+    console_device(text);
+  }
+  if (ready && benchMode()) return;
+  /* The menu's panel at once when the test firmware answers as expected;
+   * otherwise what was found stays on the screen, the menu a key away. */
+  showMenu(ready, device.kind == DEVICE_TEST &&
+                      device.layout == PROGRAM_LAYOUT_VERSION);
 
-    rom_data += rombank * ROMBANK_SIZE_BYTES;  // Move the pointer to the start of the ROM bank
-    file_data += rombank * ROMBANK_SIZE_BYTES; // Move the pointer to the start of the ROM bank in the file
-
-    for (int i = 0; i < ROMBANK_SIZE_BYTES; i++) // Change the loop size to iterate over bytes
-    {
-        unsigned char rom_byte = rom_data[i];
-        unsigned char file_byte = file_data[i];
-
-        if (rom_byte != file_byte)
-        {
-            unsigned long real_memory = rombank * ROMBANK_SIZE_BYTES + ROM4_MEMORY_START;
-            real_memory += i;
-
-            printf("\r\n    x Error: Data mismatch at address %lx. Expected: %02x, got: %02x\r\n", real_memory, file_byte, rom_byte);
-            return 1;
-        }
-
-        if (i % SPINNER_UPDATE_FREQUENCY == 0)
-        {
-            printf("\b%c", spinner[(i / SPINNER_UPDATE_FREQUENCY) % 4]);
-        }
+  for (;;) {
+    int key = console_key();
+    if (key == 'q') {
+      if (confirmQuit()) restart(1);
+      showMenu(ready, 0);
+      continue;
     }
-
-    printf("\bSuccess.\r\n");
-    return 0;
+    if (key == ' ' || key == KEY_RETURN) {
+      drawMenu(ready);
+      continue;
+    }
+    if (key == 's') {
+      report_save(overridden ? T_REPORT_GATE_OVERRIDDEN
+                  : unlocked ? T_REPORT_GATE_PASSED
+                  : linePassed ? T_REPORT_GATE_CHANNEL
+                               : T_REPORT_GATE_LOCKED,
+                  unlocked, machine.mch);
+      console_line(T_MENU_PROMPT);
+      continue;
+    }
+    if (ready && key == 'a') {
+      runAll();
+    } else if (ready && (key == 'l' || key == 'k')) {
+      lineTest(key, key == 'l' ? &lt_quick : &lt_long);
+    } else if (ready && key == 'm' && machine_isMegaSte(&machine)) {
+      lineTestMegaSte();
+    } else if (key == 'c' && (linePassed || overridden)) {
+      channelTest();
+    } else if (unlocked && (key == 'i' || key == 'p' || key == 'g' ||
+                            key == 'd' || key == 'r' || key == 'w' || key == 't')) {
+      if (chscreen_open(machine.mch)) {
+        if (key == 'i') devscreen_info();
+        if (key == 'p') devscreen_select();
+        if (key == 'g') devscreen_led();
+        if (key == 'd') devscreen_card();
+        if (key == 'r') devscreen_cardSwap();
+        if (key == 'w') devscreen_wifi();
+        if (key == 't') devscreen_bluetooth();
+        Outcome o;
+        Reason r;
+        devscreen_verdict(&o, &r);
+        setResult(key, outcomeWord(o));
+      }
+    } else if (key == 'b' && device.kind == DEVICE_TEST) {
+      if (devscreen_exit(machine.mch)) {
+        /* The cartridge port is Booster's: nothing reads it again. */
+        console_line(T_EXIT_QUIT);
+        (void)console_key();
+        restart(0);
+      }
+#ifdef MDTEST_DEBUG
+    } else if (key == 'o' && !unlocked) {
+      console_line(T_GATE_OVERRIDE);
+      unlocked = 1;
+      overridden = 1;
+#endif
+    } else {
+      continue;
+    }
+    showMenu(ready, 0);
+  }
 }
 
-/**
- * Compares sequential byte data read from ROM to expected data and
- * accumulates statistics of successful and failed matches.
- *
- * This function performs a byte-by-byte comparison between the data read
- * from a specified ROM bank and the expected data provided. It then tracks
- * and counts the number of successful matches and mismatches. This version
- * is intended to provide diagnostic information without stopping at the
- * first error.
- *
- * @param rom_data   A pointer to the start address of the data read from ROM.
- * @param file_data  A pointer to the start address of the expected data.
- * @param rombank    The ROM bank number to be tested (e.g., ROM4_BANK, ROM3_BANK).
- * @return           Returns the number of successful requests (matches).
- */
-int testSequentialReadROMBytesStats(unsigned char *rom_data, unsigned char *file_data, int rombank)
-{
-    int successful_requests = 0;
-    int failed_requests = 0;
-
-    printf("- Testing stats seq read bytes ROM %s...  ", rombank == ROM4_BANK ? "4" : "3");
-
-    rom_data += rombank * ROMBANK_SIZE_BYTES;  // Move the pointer to the start of the ROM bank
-    file_data += rombank * ROMBANK_SIZE_BYTES; // Move the pointer to the start of the ROM bank in the file
-
-    for (int i = 0; i < ROMBANK_SIZE_BYTES; i++) // Iterate over bytes
-    {
-        unsigned char rom_byte = rom_data[i];
-        unsigned char file_byte = file_data[i];
-
-        if (rom_byte != file_byte)
-        {
-            failed_requests++;
-        }
-        else
-        {
-            successful_requests++;
-        }
-
-        if (i % SPINNER_UPDATE_FREQUENCY == 0)
-        {
-            printf("\b%c", spinner[(i / SPINNER_UPDATE_FREQUENCY) % 4]);
-        }
-    }
-
-    printf("\bSuccess: %d, Fail: %d\r\n",
-           successful_requests,
-           failed_requests);
-
-    return failed_requests > 0 ? 1 : 0;
-}
-
-/**
- * Compares random byte data read from ROM to expected data.
- *
- * This function performs a byte-by-byte comparison between random bytes read
- * from a specified ROM bank and the expected data provided for a number of
- * requests. If a mismatch is found at any position, it immediately returns
- * an error.
- *
- * @param rom_data     A pointer to the start address of the data read from ROM.
- * @param file_data    A pointer to the start address of the expected data.
- * @param rombank      The ROM bank number to be tested (e.g., ROM4_BANK, ROM3_BANK).
- * @param num_requests The number of random access requests to perform.
- * @return             Returns 0 if all random bytes match, 1 if a mismatch is found.
- */
-int testRandomReadROMBytes(unsigned char *rom_data, unsigned char *file_data, int rombank, int num_requests)
-{
-    printf("- Testing %i random access bytes from ROM %s...  ", num_requests, rombank == ROM4_BANK ? "4" : "3");
-
-    rom_data += rombank * ROMBANK_SIZE_BYTES;  // Move the pointer to the start of the ROM bank
-    file_data += rombank * ROMBANK_SIZE_BYTES; // Move the pointer to the start of the ROM bank in the file
-
-    srand(Random()); // Initialize random seed
-
-    for (int i = 0; i < num_requests; i++)
-    {
-        unsigned long random_position = rand() & (ROMBANK_SIZE_BYTES - 1); // Mask the value to be within the ROM size in bytes
-
-        unsigned char rom_byte = rom_data[random_position];
-        unsigned char file_byte = file_data[random_position];
-
-        if (rom_byte != file_byte)
-        {
-            unsigned long real_memory = rombank * ROMBANK_SIZE_BYTES + ROM4_MEMORY_START;
-            real_memory += random_position;
-            printf("\r\n    x Error: Data mismatch at %p. Expected: %p, got: %p\r\n", real_memory, file_byte, rom_byte);
-            return 1;
-        }
-
-        if (i % SPINNER_UPDATE_FREQUENCY == 0)
-        {
-            printf("\b%c", spinner[(i / SPINNER_UPDATE_FREQUENCY) % 4]);
-        }
-    }
-
-    printf("\bSuccess.\r\n");
-    return 0;
-}
-
-/**
- * Compares random byte data read from ROM to expected data and provides stats.
- *
- * This function performs a byte-by-byte comparison between random bytes read
- * from a specified ROM bank and the expected data provided for a number of
- * requests. It provides statistics of successful and failed requests.
- * If a mismatch is found at any position, the failed request count increments.
- *
- * @param rom_data     A pointer to the start address of the data read from ROM.
- * @param file_data    A pointer to the start address of the expected data.
- * @param rombank      The ROM bank number to be tested (e.g., ROM4_BANK, ROM3_BANK).
- * @param num_requests The number of random access requests to perform.
- * @return             Returns 0 if all random bytes match, 1 if any mismatches found.
- */
-int testRandomReadROMBytesStats(unsigned char *rom_data, unsigned char *file_data, int rombank, int num_requests)
-{
-    int successful_requests = 0;
-    int failed_requests = 0;
-
-    printf("- Testing stats %i random access bytes ROM %s...  ", num_requests, rombank == ROM4_BANK ? "4" : "3");
-
-    rom_data += rombank * ROMBANK_SIZE_BYTES;  // Move the pointer to the start of the ROM bank
-    file_data += rombank * ROMBANK_SIZE_BYTES; // Move the pointer to the start of the ROM bank in the file
-
-    srand(Random()); // Initialize random seed
-
-    for (int i = 0; i < num_requests; i++)
-    {
-        unsigned long random_position = rand() & (ROMBANK_SIZE_BYTES - 1); // Ensure the value is within the ROM size in bytes
-
-        unsigned char rom_byte = rom_data[random_position];
-        unsigned char file_byte = file_data[random_position];
-
-        if (rom_byte != file_byte)
-        {
-            failed_requests++;
-        }
-        else
-        {
-            successful_requests++;
-        }
-
-        if (i % SPINNER_UPDATE_FREQUENCY == 0)
-        {
-            printf("\b%c", spinner[(i / SPINNER_UPDATE_FREQUENCY) % 4]);
-        }
-    }
-
-    printf("\bSuccess: %d, Fail: %d\r\n",
-           successful_requests,
-           failed_requests);
-
-    return failed_requests > 0 ? 1 : 0;
-}
-
-int load_binary_file(unsigned char **data, long *file_size)
-{
-    FILE *file;
-
-    // Open the binary file
-    file = fopen(TEST_ROM_FILE, "rb");
-    if (!file)
-    {
-        fprintf(stderr, "Failed to open testrom.bin\n");
-        return 1;
-    }
-
-    // Get the size of the file
-    fseek(file, 0, SEEK_END);
-    *file_size = ftell(file);
-    rewind(file);
-
-    // Allocate memory for the data
-    *data = (unsigned char *)malloc(sizeof(unsigned char) * (*file_size));
-    if (!*data)
-    {
-        fprintf(stderr, "Failed to allocate memory\n");
-        fclose(file);
-        return 1;
-    }
-
-    // Read the file into the data array
-    size_t read_size = fread(*data, 1, *file_size, file);
-    if (read_size != *file_size)
-    {
-        fprintf(stderr, "Error reading testrom.bin\n");
-        free(*data);
-        fclose(file);
-        return 1;
-    }
-
-    fclose(file);
-    return 0;
-}
-
-//================================================================
-// Main program
-int run()
-{
-
-    FILE *fp;
-    unsigned char *ptr;
-    size_t length;
-
-    ScreenContext screenContext;
-    initScreenContext(&screenContext);
-
-    if (screenContext.savedResolution == HIGH_RES)
-    {
-        __uint16_t palette[4] = {0xFFF, 0x000};
-        initHighResolution(palette);
-    }
-    else
-    {
-        __uint16_t palette[4] = {0xFFF, 0x000, 0x000, 0x000};
-        initMedResolution(palette);
-    }
-
-    printf("\r");
-    printf("ATARI ST SIDECART ROM TEST. V%s - (C)2023 Diego Parrilla / @soyparrilla\r\n", VERSION);
-
-    unsigned char *rom_memory = NULL;
-    unsigned char *data = NULL;
-    long file_size = 0;
-
-    int result = load_binary_file(&data, &file_size);
-    if (result == 0)
-    {
-        if (file_size != 128 * 1024)
-        {
-            printf("x Error: testrom.bin must be 128KB\r\n");
-        }
-        else
-        {
-            printf("- testrom.bin loaded\r\n");
-            printf("- testrom.bin size: %ld bytes\r\n", file_size);
-
-            rom_memory = (unsigned char *)ROM_MEMORY_START;
-            printf("- ROM memory address final release: %p\r\n", (void *)rom_memory);
-
-            testDifferentVersions(rom_memory);
-
-            // Sequential access tests
-            // Words access
-            testSequentialReadROM(rom_memory, data, ROM4_BANK);
-            testSequentialReadROM(rom_memory, data, ROM3_BANK);
-            testSequentialReadROMStats(rom_memory, data, ROM4_BANK);
-            testSequentialReadROMStats(rom_memory, data, ROM3_BANK);
-            // Bytes access
-            testSequentialReadROMBytes(rom_memory, data, ROM4_BANK);
-            testSequentialReadROMBytes(rom_memory, data, ROM3_BANK);
-            testSequentialReadROMBytesStats(rom_memory, data, ROM4_BANK);
-            testSequentialReadROMBytesStats(rom_memory, data, ROM3_BANK);
-
-            // Random access tests
-            // Words access
-            testRandomReadROM(rom_memory, data, ROM4_BANK, RANDOM_ACCESS_ITERATIONS);
-            testRandomReadROM(rom_memory, data, ROM3_BANK, RANDOM_ACCESS_ITERATIONS);
-            testRandomReadROMStats(rom_memory, data, ROM4_BANK, RANDOM_ACCESS_ITERATIONS);
-            testRandomReadROMStats(rom_memory, data, ROM3_BANK, RANDOM_ACCESS_ITERATIONS);
-            // Bytes access
-            testRandomReadROMBytes(rom_memory, data, ROM4_BANK, RANDOM_ACCESS_ITERATIONS);
-            testRandomReadROMBytes(rom_memory, data, ROM3_BANK, RANDOM_ACCESS_ITERATIONS);
-            testRandomReadROMBytesStats(rom_memory, data, ROM4_BANK, RANDOM_ACCESS_ITERATIONS);
-            testRandomReadROMBytesStats(rom_memory, data, ROM3_BANK, RANDOM_ACCESS_ITERATIONS);
-
-            // By address line tests
-            testAddressLinesSequentialReadROM(rom_memory, data, ROM4_BANK, ADDRESS_LINE_ITERATIONS);
-            testAddressLinesSequentialReadROM(rom_memory, data, ROM3_BANK, ADDRESS_LINE_ITERATIONS);
-        }
-    }
-    else
-    {
-        printf("x Error: testrom.bin not found\r\n");
-    }
-
-    // Clean up
-    free(data);
-
-    printf("Press any key to exit...\r\n");
-
-    getchar();
-
-    restoreResolutionAndPalette(&screenContext);
-}
-
-//================================================================
-// Standard C entry point
-int main(int argc, char *argv[])
-{
-    // switching to supervisor mode and execute run()
-    // needed because of direct memory access for reading/writing the palette
-    Supexec(&run);
+/* From start.s, in supervisor mode on the program's own stack. */
+int main(void) {
+  machine_identify(&machine); /* what TOS left in RAM, read once */
+  hw_takeOver(&machine);      /* from here on, no TOS */
+  run();
+  restart(1);
+  return 0;
 }

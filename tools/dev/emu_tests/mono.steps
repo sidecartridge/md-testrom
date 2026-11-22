@@ -1,0 +1,7 @@
+# A monochrome monitor: the program draws in high resolution, 80 x 25.
+@monitor mono
+say "^  monochrome monitor, 640 x 400" 100
+say "^PASS  The test microfirmware answers" 100
+sayn 1 "^Press a key" 100
+wait 50
+shot mono

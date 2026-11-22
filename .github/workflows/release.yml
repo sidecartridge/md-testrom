@@ -1,5 +1,11 @@
 name: Release
 
+# A v* tag builds the release and publishes it: the microfirmware (UF2 and
+# its descriptor) to the GitHub release and the bucket Booster installs from,
+# the program (MDTEST.TOS and a floppy image, MDTEST.ST) to the GitHub
+# release. Run by hand, it builds the same files and keeps them as the run's
+# artifact, publishing nothing: a rehearsal.
+
 on:
   push:
     tags:
@@ -8,6 +14,12 @@ on:
 
 permissions:
   contents: write
+
+env:
+  # The same toolchain and toolkit as the Build workflow and local builds.
+  ARM_TOOLCHAIN_VERSION: 14.2.rel1
+  STCMD_NO_TTY: 1
+  STCMD_IMAGE_TAG: 1.5.0
 
 jobs:
   build:
@@ -19,34 +31,63 @@ jobs:
           - os: ubuntu-latest
     steps:
     - name: Checkout the code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install the Pico Toolchain
+    - name: Install the build tools
       run: |
           sudo DEBIAN_FRONTEND=noninteractive apt update
-          sudo DEBIAN_FRONTEND=noninteractive apt install -y cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential libstdc++-arm-none-eabi-newlib
+          sudo DEBIAN_FRONTEND=noninteractive apt install -y cmake build-essential mtools
+
+    - name: Cache the ARM GNU Toolchain
+      id: arm-toolchain
+      uses: actions/cache@v4
+      with:
+        path: ~/arm-gnu-toolchain
+        key: arm-gnu-toolchain-${{ env.ARM_TOOLCHAIN_VERSION }}-x86_64
+
+    - name: Download the ARM GNU Toolchain
+      if: steps.arm-toolchain.outputs.cache-hit != 'true'
+      run: |
+          mkdir -p ~/arm-gnu-toolchain
+          curl -fsSL "https://developer.arm.com/-/media/Files/downloads/gnu/${ARM_TOOLCHAIN_VERSION}/binrel/arm-gnu-toolchain-${ARM_TOOLCHAIN_VERSION}-x86_64-arm-none-eabi.tar.xz" \
+            | tar -xJ -C ~/arm-gnu-toolchain --strip-components=1
+
+    - name: Use the ARM GNU Toolchain
+      run: |
+          echo "$HOME/arm-gnu-toolchain/bin" >> "$GITHUB_PATH"
+          echo "PICO_TOOLCHAIN_PATH=$HOME/arm-gnu-toolchain/bin" >> "$GITHUB_ENV"
 
     - name: Install AtariST Toolkit Docker image
-      run: curl -sL https://github.com/sidecartridge/atarist-toolkit-docker/releases/download/v1.0.0/install_atarist_toolkit_docker.sh | bash
+      run: curl -sL https://github.com/sidecartridge/atarist-toolkit-docker/releases/download/v1.5.0/install_atarist_toolkit_docker.sh | bash
 
-    - name: Run - remove interactive
-      run: sed -i 's/-it//' /usr/local/bin/stcmd
+    - name: Date the build by its commit
+      run: echo "RELEASE_DATE=$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M:%S')" >> "$GITHUB_ENV"
 
     - name: Install dependencies
       run: |
         pip install boto3
           
+    - name: Check the release
+      run: |
+        if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          tools/release_check.sh "$GITHUB_REF_NAME"
+        else
+          tools/release_check.sh
+        fi
+
     - name: Run - Build PICO_W release version
-      run: ./build.sh pico_w Release ${{ secrets.APP_UUID }}
+      env:
+        APP_UUID: ${{ secrets.APP_UUID }}
+      run: ./build.sh pico_w release ${APP_UUID:-44444444-4444-4444-8444-444444444444}
 
     - name: Get current date
       id: build
-      run: echo "::set-output name=date::$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+      run: echo "date=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> "$GITHUB_OUTPUT"
 
     - name: Get version from version.txt
       id: get_version
@@ -61,11 +102,22 @@ jobs:
 
     - name: Copy release artifacts
       run: |
-        mkdir -p release
+        mkdir -p release floppy
         cp dist/*.uf2 release/
         cp dist/*.json release/
+        cp dist/MDTEST.TOS release/
+        cp dist/MDTEST.TOS floppy/
+        tools/dev/make_floppy.sh floppy release/MDTEST.ST MDTEST
+        ls -l release
+
+    - name: Keep the files as the run's artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ env.RELEASE_VERSION }}
+        path: release/
 
     - name: Upload the binaries to release
+      if: startsWith(github.ref, 'refs/tags/v')
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -83,6 +135,7 @@ jobs:
         make_latest: true
 
     - name: Upload artifacts to S3
+      if: startsWith(github.ref, 'refs/tags/v')
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -96,7 +149,10 @@ jobs:
         release_dir = 'release'
         bucket_name = 'atarist.sidecartridge.com'
 
-        for filename in os.listdir(release_dir):
+        # Only the microfirmware: the bucket is Booster's, shared by every app.
+        for filename in sorted(os.listdir(release_dir)):
+            if not filename.endswith(('.uf2', '.json')):
+                continue
             local_path = os.path.join(release_dir, filename)
             s3_path = filename  # uploaded at root of the bucket
             print(f"Uploading {local_path} to s3://{bucket_name}/{s3_path}")

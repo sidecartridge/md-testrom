@@ -1,0 +1,16 @@
+# No press in the test's 20 s: a failure with advice. Then a button held from
+# the start: stuck.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key p
+say "^Press SELECT on the device once" 500
+say "^FAIL  No SELECT press was seen" 1500
+say "^  waited 20 s: no press" 100
+sayn 3 "^Press a key" 500
+select 5000
+key p
+say "^FAIL  SELECT reads pressed all the time" 500

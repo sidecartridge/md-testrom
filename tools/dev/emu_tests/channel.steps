@@ -1,0 +1,22 @@
+# The command channel: ROM3 selected, hello, the channel's own test, and ROM3
+# given back. EmuMD serves no ROM3 data, so the line test cannot pass there:
+# the debug build's override opens the gate.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key c
+say "^PASS  The device takes commands" 500
+log "ROM3 selected as the command channel" 100
+say "^Hello burst +500  PASS" 3000
+say "^Echo, mixed +10000  PASS" 30000
+say "^During a job +\d+  PASS" 3000
+say "^RP counters +\d+  PASS" 500
+say "^PASS  The command channel is clean" 100
+log "ST\| PASS  The command channel is clean" 100
+log "ST\| Press a key" 500
+key q
+key q
+log "ROM3 is test data again" 500

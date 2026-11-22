@@ -1,0 +1,10 @@
+# Nothing on the cartridge port: open bus where the header should be.
+@hatari bare
+say "^Device:  none found" 100
+say "^FAIL  No Multi-device answers in the cartridge port" 100
+say "^The line test can tell what does not answer" 100
+say "^Press a key" 100
+key x
+key l
+say "^FAIL  The device does not answer at all" 12000
+nosay "^PASS"

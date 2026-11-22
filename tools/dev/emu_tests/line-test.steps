@@ -1,0 +1,17 @@
+# The quick line test. EmuMD serves no ROM3 data (every ROM3 read is $FFFF),
+# so ROM4 passes and ROM3 is named as not answering; the verdict reaches the
+# firmware as a frame of ROM3 reads.
+say "^Press a key" 100
+key x
+key l
+say "^Quick pass: about \d+ s" 100
+say "^Words in order +ROM4 PASS" 3000
+say "^Address lines +ROM4 PASS" 6000
+say "^Interrupts off +ROM3 FAIL" 9000
+say "^ROM3:" 100
+say "^FAIL  ROM3 does not answer" 100
+say "^Check the !ROM3 select line \(GPIO 26\)" 100
+say "^The device tests stay locked" 100
+nosay "^ROM4:"
+log "Line test verdict 1: class 1, first \$00FB" 500
+say "^Press a key" 100

@@ -1,0 +1,21 @@
+# The microSD card works: described, one file written, read back and
+# deleted, and nothing else on the card changed.
+@sdapps
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key d
+say "^Starting the card" 100
+say "^  Card      SDHC, 32768 MB, bus 12500 kHz" 1500
+say "^  Maker     03 SD EMUMD, rev 1.0, made 2026-11" 100
+say "^  Serial    4D44454D, started in \d+ ms" 100
+say "^  Format    FAT32, \d+ MB, 16384 MB free" 100
+say "^  Label     EMUMD" 100
+say "^  Booster's apps folder is on the card" 100
+say "^  Write     \d+ KB/s, read \d+ KB/s" 100
+say "^PASS  The microSD card works" 100
+nosay "^WARN  The test file could not be deleted"
+sdsame

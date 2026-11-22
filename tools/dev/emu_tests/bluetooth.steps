@@ -1,0 +1,27 @@
+# Bluetooth: the controller starts, both scans hear the stand-in's three
+# devices, and a report leaves their names out when asked.
+@debug
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key t
+say "^Starting the Bluetooth controller" 100
+say "^Listening for Bluetooth devices \(7 s\)" 600
+say "^Listening for low-energy devices \(5 s\)" 1200
+say "^  Bluetooth 5.1, address 28:CD:C1:4D:44:02, started in \d+ ms" 800
+say "^  Firmware  2257, maker Cypress" 100
+say "^  Devices   3 heard: 1 classic, 2 low energy" 100
+say "^   -58 dBm classic E0:4D:44:45:4D:01 EmuMD Phone" 100
+say "^   -66 dBm LE      E0:4D:44:45:4D:02 EmuMD Tag" 100
+say "^   -88 dBm LE      E0:4D:44:45:4D:03 $" 100
+say "^PASS  Bluetooth works" 100
+nosay "^WARN  No Bluetooth device"
+sayn 3 "^Press a key" 300
+key s
+say "^Keep the Wi-Fi and Bluetooth names heard in the report" 100
+key n
+say "^Report saved on the microSD card as MDTEST-REPORT-00.TXT" 1500
+sdfile MDTEST-REPORT-00.TXT "^   -58 dBm classic E0:4D:44:45:4D:01 \(name left out\)\r$"
+sdfilenot MDTEST-REPORT-00.TXT "EmuMD Phone|EmuMD Tag"

@@ -1,0 +1,13 @@
+# Every answer lost: the select is answered (while ROM3 is data the firmware
+# answers it itself), hello is not.
+@debug
+@drop 1
+say "^Press a key" 100
+key x
+key o
+say "^WARN  Gate overridden" 100
+sayn 2 "^Press a key" 300
+key c
+say "^FAIL  The device stopped answering" 3000
+say "^  ROM3 selected, no answer to hello" 100
+nosay "^PASS  The device takes commands"

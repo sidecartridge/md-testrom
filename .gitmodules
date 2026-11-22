@@ -4,3 +4,9 @@
 [submodule "pico-extras"]
 	path = pico-extras
 	url = https://github.com/raspberrypi/pico-extras.git
+[submodule "emu/emumd"]
+	path = emu/emumd
+	url = https://github.com/neilrackett/emumd.git
+[submodule "fatfs-sdk"]
+	path = fatfs-sdk
+	url = https://github.com/carlk3/no-OS-FatFS-SD-SDIO-SPI-RPi-Pico.git
