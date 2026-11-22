@@ -1,64 +1,87 @@
-# ATARI ST Sidecart Test suite for the ROM Emulator
+# SidecarTridge Multi-device Test
 
-This repository contains a test program designed to validate the functionality and performance of the Sidecartridge Multidevice. 
+Tests a SidecarTridge Multi-device and its connection to an Atari ST, STE, Mega ST, Mega STE, TT or Falcon: every line of the cartridge port, the command channel, the microSD card, Wi-Fi, Bluetooth, the SELECT button and the green LED. At the end it says what works, what does not, and what to do about it.
 
-## Introduction
+It has two halves, released together:
 
-The SidecarTridge Multidevice emulates the behavior of Atari ST cartridges and the ROM memory contained. To ensure its flawless operation and accurate timing, this test suite offers several read tests, presenting the results visually on-screen.
+- **The Multidevice Test microfirmware**, installed and launched from Booster (the Multi-device's own firmware, v2.0 or later). It fills the cartridge port with test data and puts no code on the Atari: the computer starts as if no cartridge were there.
+- **`MDTEST.TOS`**, the test program, run on the Atari. One file: it needs no data file.
 
-For those new to the Sidecart ROM Emulator, we recommend visiting the official [SidecarTridge Multidevice website](https://sidecartridge.com) for a comprehensive overview.
+For a first look at the Multi-device itself, see the [SidecarTridge website](https://sidecartridge.com).
 
-## Getting Started
+## What you need
 
-### Atari ST / MegaST / STE / MegaSTE / TT / Falcon 
+- A SidecarTridge Multi-device running Booster, with Wi-Fi set up in Booster if you want the Wi-Fi test to reach the internet.
+- An Atari ST, STE, Mega ST, Mega STE, TT or Falcon, with 512 KB of RAM or more (tested with TOS 1.04, 1.62, 2.06, 3.06 and 4.04). On a TT the program needs a colour monitor (it cannot draw TT high resolution). A Falcon works on an RGB or TV monitor, on VGA and on mono.
+- A microSD card in the Multi-device, for the card test and to save the report (optional: without one the card test fails and the screen can be photographed instead).
+- A way to get `MDTEST.TOS` onto the Atari (below).
 
-To get started with the testing process, you'll need two main files, both of which can be located in the [Release page](https://github.com/sidecartridge/md-testrom/releases/tag/v0.0.3) of this repository:
+## Getting started
 
-- **`TESTSCRT.TOS`**: The primary test program, which should be transferred to your Atari ST machine.
-  
-- **`TESTROM.BIN`**: A binary file containing randomized data across two ROM banks. This file needs to be copied to your Atari ST computer and should be placed in the same directory as `TESTSCRT.TOS`. It is essential for the test program to function correctly.
+### 1. Put the program on the Atari
 
-### SidecarTridge Multidevice Setup with a functional computer
+Download from the [latest release](https://github.com/sidecartridge/md-testrom/releases/latest):
 
-This version of the test suite is designed to run on the SidecarTridge Multidevice with the new firmware v2.0 or later. Once you are in the management web interface of the SidecarTridge Multidevice also called the `Booster Configurator`, you have to find the `Multidevice Test` microfirmware, download it, and launch it. This microfirmware is designed to work with the programs located in the Atari computer.
+- **`MDTEST.TOS`**: copy it to a floppy, a hard disk, or any drive the Atari reads.
+- **`MDTEST.ST`**: the same program in a floppy image, for a Gotek, a floppy written from the image, or an emulator.
 
-![SidecarTridge Multidevice Test](/apps.png)
+Do not put it in the `AUTO` folder: quitting the program restarts the computer, so it would start again at every boot.
 
-After launching the Multidevice Test, your computer should start as if nothing happened. You can now run the `TESTSCRT.TOS` program from your Atari ST computer.
+The program loads from any drive, without help from the Multi-device: a computer that cannot boot with the device in can still load it from a floppy (see [The Atari that will not boot with the device in](#the-atari-that-will-not-boot-with-the-device-in)).
 
-### SidecarTridge Multidevice Setup with a failed computer <-> device connection
+### 2. Launch the Multidevice Test microfirmware
 
-One of the reasons for running this test suite is to verify the connection between the SidecarTridge Multidevice and your Atari ST computer. So, if your computer is not running correctly with the device connected, you can still run the test suite.
+In Booster's web page (the Booster Configurator), find **Multidevice Test** in the apps, download it and launch it.
 
-The SidecarTridge Multidevice with the new firmware v2.0 can start and can be configured without the Atari ST computer. In ths *blind mode*, the user must follow these steps:
+![The Multidevice Test in Booster's apps](/apps.png)
 
-1. Power on the SidecarTridge Multidevice with a USB cable connected to a power source or a computer.
-2. If your device did work and you were able to access the management web interface, you can jump to step 8.
-3. If you are not able to access the management web interface, you can reset the device by pressing the SELECT button for MORE than 10 seconds. Then, the device will reset to factory settings.
-4. Power off and power on the SidecarTridge Multidevice again. Now, it should start in the factory or FABRIC mode.
-5. Connect to the `SIDECART` Wi-Fi network using your computer or smartphone. Use the password `sidecart`.
-6. Open a web browser and go to the address `http://192.168.4.1`. This will take you to the management web interface of the SidecarTridge Multidevice. Select the WiFi network you want to connect to and enter the password for that network. The device will reboot and connect to the selected WiFi network.
-7. The device will now be accessible via the WiFi network you selected as `http://sidecart.local` or `http://<IP_ADDRESS_OF_THE_DEVICE>`. If the DNS of your network cannot be configured to resolve `sidecart.local`, you should find the IP address of the device in your router's DHCP client list.
-8. Once you have access to the management web interface, you have to download the `Multidevice Test` microfirmware and launch it. This microfirmware is designed to work with the programs located in the Atari computer.
-9. Power off the SidecarTridge Multidevice and connect it to your Atari ST computer. Remove the USB cable to guarantee that the device is powered by the Atari ST computer.
-10. Power on the Atari ST computer. The SidecarTridge Multidevice should start automatically, and you can run the `TESTSCRT.TOS` program from your Atari ST computer.
+The device restarts with the test microfirmware and the Atari starts as if no cartridge were there.
 
-## Output of the test program
+### 3. Run the tests
 
-The test program will output the results of the various tests it performs on the SidecarTridge Multidevice. 
+Run `MDTEST.TOS` from the desktop.
 
-![Test Output](/testscrt.png)
+![MDTEST.TOS main screen](/mdtest.png)
 
-The program will perform the following tests. It will take several minutes:
+Press **[A]** to run every test in order, then choose **[Q]** for the quick line test (about 2 minutes in all) or **[T]** for the thorough one (about 6 minutes). At the end the program asks whether to run the tests that need you: pressing SELECT, looking at the LED, and taking the microSD card out and back in.
 
-1. **Test version string**: Displays the version of the test program and in the ROM image. It must match the version of the test program.
-2. **Test sequential read in ROM 3 and ROM 4**: Reads the ROM 3 and ROM 4 banks sequentially and displays the results. The expected result is that all bytes read match the expected value.
-3. **Test sequential read of bytes in ROM 3 and ROM 4**: Reads the ROM 3 and ROM 4 banks sequentially, byte by byte, and displays the results. The expected result is that all bytes read match the expected value.
-4. **Test random read in ROM 3 and ROM 4**: Reads the one million times random words from the ROM 3 and ROM 4 banks and displays the results. The expected result is that all bytes read match the expected value.
-5. **Test random read of bytes in ROM 3 and ROM 4**: Reads the one million times random bytes from the ROM 3 and ROM 4 banks and displays the results. The expected result is that all bytes read match the expected value.
-6. **Test sequential read in ROM 3 and ROM 4 incrementing the address by address lines**: Reads the ROM 3 and ROM 4 banks sequentially, incrementing the address by address lines, and displays the results. The expected result is that all bytes read match the expected value. This test is designed to figure out if some of the address lines are not working correctly and expose the problem.
+A key between tests stops the run. The summary lists each area with PASS, WARN, FAIL, SKIP, LOCKED or not run, then what it means and what to do.
 
-A healthy SidecarTridge Multidevice should pass all tests without any errors. If any test fails, it indicates a potential issue with the device, its connection, or the computer itself.
+Each test also has its own key on the menu:
+
+| Key | Test |
+| --- | --- |
+| [L] | Line test, quick pass: every data and address line and both ROM selects (about 22 s on an 8 MHz ST) |
+| [K] | Line test, long pass: a million random reads |
+| [M] | On a Mega STE: the quick pass at 8 MHz, 16 MHz and 16 MHz with the cache (your setting is put back) |
+| [C] | Command channel test: the device answering the Atari's commands, thousands of them |
+| [I] | Device information: firmware, board, clock, temperature, memory, why it last started |
+| [P] | The SELECT button |
+| [G] | The green LED: on, off and blinking, each one confirmed by you |
+| [D] | microSD card: what card, its filesystem, a test file written, read back and deleted |
+| [R] | microSD card out and back in |
+| [W] | Wi-Fi: the radio, the networks heard, the network set up in Booster joined, the router, a name looked up, a web page fetched |
+| [T] | Bluetooth: the controller, and the devices it hears |
+| [B] | Back to Booster (shown when the test microfirmware answers) |
+| [S] | Save the report |
+| [Q] | Quit: Q twice restarts the computer |
+
+[C] appears once a line test passes, and [I] to [T] once the command channel test passes too: when the port does not carry the data, nothing sent through it can be trusted. After a test its lines stay on the screen; press another test's key, or Space for the menu.
+
+### 4. Save the report
+
+**[S]** writes everything the program has shown to the microSD card in the Multi-device, as `MDTEST-REPORT-00.TXT` (then `-01`, `-02`...). It goes through the command channel, so it can be saved once the line test and the command channel test have passed; before that, photograph the screen. The program asks first whether to keep the names of the Wi-Fi networks and Bluetooth devices it heard.
+
+## When something is wrong
+
+The program says what it found in the port before anything else:
+
+- **No Multi-device answers**: the device is not in the port, not powered, or not running. Switch the computer off, check the device is fully in, and launch the Multidevice Test from Booster.
+- **Another microfirmware**: launch the Multidevice Test from Booster, then run the program again.
+- **An old Multidevice Test** (v0.0.3): update the microfirmware in Booster (see [Upgrading from v0.0.3](#upgrading-from-v003)).
+- **The microfirmware and the program are from different releases**: the program says which one to update. Use the `MDTEST.TOS` of the same release as the microfirmware.
+
+When a line test fails, the program names the fault: a data line stuck or shorted to another, an address line, a select line, one byte lane, a whole bank not answering, the banks swapped, errors that come and go. Each finding comes with advice.
 
 ### What the line test cannot check
 
@@ -69,57 +92,58 @@ The line test checks the data lines D0-D15, the address lines A1-A15, the ROM4 a
 - **The port's +5 V**, beyond the device working at all.
 - **The SELECT button, the LED, the microSD card and the radio**: the device tests check these once the line test passes.
 
-## Return to the Booster Configurator
+### The Atari that will not boot with the device in
 
-To return to the Booster Configurator, either:
+The Multi-device can be set up without the Atari (*blind mode*):
 
-- choose **[B] Back to Booster** in `MDTEST.TOS`: the device restarts into Booster; then reset the computer, or switch it off and on, to use Booster; or
-- press the **`SELECT`** button on your SidecarTridge Multi-device (except during the SELECT button test, which only reports the press).
+1. Power on the Multi-device with a USB cable connected to a power source or a computer.
+2. If you can reach Booster's web page, go to step 8.
+3. If you cannot, reset the device to its factory settings: hold the SELECT button for more than 10 seconds.
+4. Power the Multi-device off and on again. It starts in factory mode.
+5. Connect to the `SIDECART` Wi-Fi network from a computer or a phone, with the password `sidecart`.
+6. Open `http://192.168.4.1` in a web browser: Booster's web page. Choose your Wi-Fi network and enter its password. The device restarts and joins it.
+7. The device is now at `http://sidecart.local`, or at its address on your network (your router's list of DHCP clients has it).
+8. In Booster's web page, download the Multidevice Test and launch it.
+9. Power the Multi-device off and connect it to the Atari. Remove the USB cable, so the Atari powers the device.
+10. Power on the Atari. The Multi-device starts the test microfirmware, the Atari starts as if no cartridge were there, and you can run `MDTEST.TOS` from a floppy.
 
-Holding `SELECT` for 10 seconds resets the device to its factory settings.
+## Back to Booster
 
+Either:
 
-## Requirements for developers
+- choose **[B] Back to Booster** in `MDTEST.TOS`: the device restarts into Booster, and a key restarts the computer into it; or
+- press the **SELECT** button on the Multi-device (except during the SELECT button test, which only reports the press).
 
-- An Atari ST/MegaST/STE/MegaSTE computer. There are several emulators available for Windows, Linux, and Mac. I recommend [Hatari](http://hatari.tuxfamily.org/), and I'm also a big fan of [MiSTer](https://misterfpga.org/). It should work on any Atari STe with at least 1MB of RAM.
+Holding SELECT for 10 seconds resets the device to its factory settings.
 
-- A SidecarTridge Multi-device with a Raspberry Pi Pico WH.
+## Upgrading from v0.0.3
 
-- The [atarist-toolkit-docker](https://github.com/sidecartridge/atarist-toolkit-docker): You should read first how to install it and how to use it. It's very easy.
+v0.0.3 was a different pair: the program `TESTSCRT.TOS` with its data file `TESTROM.BIN`. Neither works with this microfirmware.
 
-- A `git` client. You can use the command line or a GUI client.
+1. In Booster, update the Multidevice Test microfirmware (or download it again) and launch it.
+2. On the Atari, delete `TESTSCRT.TOS` and `TESTROM.BIN`, and copy the new `MDTEST.TOS`.
 
-- A Makefile compatible with GNU Make.
+`MDTEST.TOS` recognises a device still running v0.0.3 and says to update it.
 
-## Building
+## Building from source
 
-Once you have your real Atari ST computer, Hatari emulator or MiSTer Atari ST up and running, you can build the program using the following steps:
-
-1. Clone this repository:
-
-```
-$ git clone https://github.com/sidecartridge/md-testrom.git
-```
-
-2. Export the `ST_WORKING_FOLDER` environment variable with the absolute path of the folder where you cloned the repository:
-
-```
-export ST_WORKING_FOLDER=<ABSOLUTE_PATH_TO_THE_FOLDER_WHERE_YOU_CLONED_THE_REPO>
-```
-
-3. Build the test program. Enter the `md-testrom` folder and run the `make` script:
+The microfirmware and the program build together:
 
 ```
+git clone https://github.com/sidecartridge/md-testrom.git
 cd md-testrom
-make
+./build.sh pico_w release <APP_UUID>
 ```
 
-4. Copy the `dist/TESTSCRT.TOS` file to your Atari ST computer, Hatari emulator or MiSTer Atari ST.
+`dist/` then holds the microfirmware (`<APP_UUID>-<VERSION>.uf2` and `<APP_UUID>.json`) and `MDTEST.TOS`.
 
-5. Run it!
+You need:
 
-## Resources 
+- The ARM GNU Toolchain 14.2 (`arm-none-eabi-gcc` on the `PATH`, or `PICO_TOOLCHAIN_PATH`), CMake 3.26 or later, Python 3 and `git`.
+- The [atarist-toolkit-docker](https://github.com/sidecartridge/atarist-toolkit-docker) 1.5.0 (`stcmd`), for the Atari program.
 
+The build fetches its submodules (the Raspberry Pi Pico SDK, pico-extras and FatFs) and pins them to their tested versions. `<APP_UUID>` is the app's identity in Booster; without one, the build uses a development UUID.
 
 ## License
-This project is licenses under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
+
+This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
