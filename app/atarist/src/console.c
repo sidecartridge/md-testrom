@@ -14,12 +14,18 @@
 #define BODY_BOTTOM 23
 #define STATUS_ROW 24
 #define SCREEN_WIDTH 81 /* console_wrap() keeps one column free */
-#define REPORT_LINES 200
+/* The report: every line, end to end in one pool (most lines are short); a
+ * guided run with the menu is about 200 lines. */
+#define REPORT_LINES 1500
+#define REPORT_BYTES 49152U
 
-static char report[REPORT_LINES][LINE_CHARS];
+static char reportPool[REPORT_BYTES];
+static unsigned short reportAt[REPORT_LINES];
+static unsigned short reportUsed;
 static unsigned char privateStart[REPORT_LINES];
 static unsigned char privateLength[REPORT_LINES];
 static int reportCount;
+static unsigned reportDropped; /* lines that did not fit */
 static long nfStderr;
 static char machineText[HW_COLUMNS];
 static void record(const char *text);
@@ -227,10 +233,16 @@ void console_setMirror(void (*mirror)(const char *line)) {
 
 /* A line for the report, the host's log and the RP's mirror. */
 static void record(const char *text) {
-  if (reportCount < REPORT_LINES) {
-    strncpy(report[reportCount], text, LINE_CHARS - 1);
-    report[reportCount][LINE_CHARS - 1] = '\0';
+  size_t n = strlen(text);
+  if (n > LINE_CHARS - 1) n = LINE_CHARS - 1;
+  if (reportCount < REPORT_LINES && reportUsed + n + 1 <= REPORT_BYTES) {
+    reportAt[reportCount] = reportUsed;
+    memcpy(reportPool + reportUsed, text, n);
+    reportPool[reportUsed + n] = '\0';
+    reportUsed = (unsigned short)(reportUsed + n + 1);
     reportCount++;
+  } else {
+    reportDropped++;
   }
   if (nfStderr) {
     nf_call(nfStderr, "MDTEST: ");
@@ -272,7 +284,7 @@ void console_privateLine(const char *name, const char *fmt, ...) {
   int line = reportCount;
   emit(text);
   const char *at = name[0] ? strstr(text, name) : 0;
-  if (at && line < REPORT_LINES) {
+  if (at && line < reportCount) { /* the line was kept */
     privateStart[line] = (unsigned char)(at - text);
     privateLength[line] = (unsigned char)strlen(name);
   }
@@ -293,7 +305,11 @@ int console_keyPressed(void) { return hw_key() != 0; }
 
 int console_reportLines(void) { return reportCount; }
 
-const char *console_reportLine(int index) { return report[index]; }
+const char *console_reportLine(int index) {
+  return reportPool + reportAt[index];
+}
+
+unsigned console_reportDropped(void) { return reportDropped; }
 
 int console_reportPrivate(int index, int *start) {
   *start = privateStart[index];

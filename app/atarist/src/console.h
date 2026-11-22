@@ -70,6 +70,9 @@ void console_privateLine(const char *name, const char *fmt, ...);
 int console_reportLines(void);
 const char *console_reportLine(int index);
 
+/* Lines written after the report was full, so not in it. */
+unsigned console_reportDropped(void);
+
 /* Where a report line names a network: its length, 0 for none. */
 int console_reportPrivate(int index, int *start);
 

@@ -178,6 +178,7 @@
 #define T_NETWORK_LEFT_OUT "(name left out)"
 
 #define T_REPORT_FORMAT "MDTEST REPORT 1"
+#define T_REPORT_FULL "(the report is full: %u later lines were not kept)"
 /* The report's second line, whatever was run: the gate's state. */
 #define T_REPORT_GATE_PASSED "Line test and command channel: passed, device tests unlocked."
 #define T_REPORT_GATE_CHANNEL "Line test: passed; command channel: not passed, device tests locked."
@@ -515,7 +516,7 @@
 #define T_C_SEL_STUCK "The SELECT button reads pressed all the time."
 #define T_A_SEL_STUCK \
   "Free the button: held 10 s at power-on, it resets the device's settings."
-#define T_C_LED "The radio chip works but the green LED was not seen."
+#define T_C_LED "The radio chip works but the green LED did not do what it was told."
 #define T_A_LED \
   "The LED or its path on the Pico W is faulty; nothing else needs it."
 #define T_C_SWAP "The card slot does not see a card leave or come back."

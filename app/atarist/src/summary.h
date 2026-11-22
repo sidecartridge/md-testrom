@@ -59,7 +59,7 @@ typedef enum {
   R_BT_NOTHING,      /* nothing heard: a warning */
   R_SEL_NONE,        /* no press seen */
   R_SEL_STUCK,       /* pressed from the start */
-  R_LED_UNSEEN,      /* the chip took the commands, the LED was not seen */
+  R_LED_UNSEEN,      /* the chip took the commands, the LED did not follow them */
   R_SWAP             /* the card was not seen leaving or coming back */
 } Reason;
 
