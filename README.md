@@ -1,4 +1,14 @@
+<div align="center">
+
+<img src="icon.png" alt="SidecarTridge Multi-device Test" width="180" />
+
 # SidecarTridge Multi-device Test
+
+[![Build](https://github.com/sidecartridge/md-testrom/actions/workflows/build.yml/badge.svg)](https://github.com/sidecartridge/md-testrom/actions/workflows/build.yml)
+[![Release](https://github.com/sidecartridge/md-testrom/actions/workflows/release.yml/badge.svg)](https://github.com/sidecartridge/md-testrom/actions/workflows/release.yml)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+
+</div>
 
 Tests a SidecarTridge Multi-device and its connection to an Atari ST, STE, Mega ST, Mega STE, TT or Falcon: every line of the cartridge port, the command channel, the microSD card, Wi-Fi, Bluetooth, the SELECT button and the green LED. At the end it says what works, what does not, and what to do about it.
 
@@ -7,18 +17,33 @@ It has two halves, released together:
 - **The Multidevice Test microfirmware**, installed and launched from Booster (the Multi-device's own firmware, v2.0 or later). It fills the cartridge port with test data and puts no code on the Atari: the computer starts as if no cartridge were there.
 - **`MDTEST.TOS`**, the test program, run on the Atari. One file: it needs no data file.
 
-For a first look at the Multi-device itself, see the [SidecarTridge website](https://sidecartridge.com).
+> Learn how to install and use it:
+> <https://docs.sidecartridge.com/sidecartridge-multidevice/microfirmwares/multidevice-test/>
 
-## What you need
+> 🛒 **Get the hardware:** [SidecarTridge Multi-device](https://sidecartridge.com/products/sidecartridge-multidevice-atari-st/)
+
+## 📋 What you need
 
 - A SidecarTridge Multi-device running Booster, with Wi-Fi set up in Booster if you want the Wi-Fi test to reach the internet.
 - An Atari ST, STE, Mega ST, Mega STE, TT or Falcon, with 512 KB of RAM or more (tested with TOS 1.04, 1.62, 2.06, 3.06 and 4.04). On a TT the program needs a colour monitor (it cannot draw TT high resolution). A Falcon works on an RGB or TV monitor, on VGA and on mono.
 - A microSD card in the Multi-device, for the card test and to save the report (optional: without one the card test fails and the screen can be photographed instead).
 - A way to get `MDTEST.TOS` onto the Atari (below).
 
-## Getting started
+## 🚀 Installation
 
-### 1. Put the program on the Atari
+### 1. Install and launch the Multidevice Test
+
+1. **Launch the Booster App** on your SidecarTridge Multi-device.
+2. Open the **Booster web interface** in your browser.
+3. Go to the **Apps** tab and select **Multidevice Test** from the available apps list.
+4. Click **Download** to install the app to your SidecarTridge's microSD card.
+5. Once installed, select the app and click **Launch** to start it.
+
+![The Multidevice Test in Booster's apps](/apps.png)
+
+The device restarts with the test microfirmware and the Atari starts as if no cartridge were there.
+
+### 2. Put the program on the Atari
 
 Download from the [latest release](https://github.com/sidecartridge/md-testrom/releases/latest):
 
@@ -29,15 +54,9 @@ Do not put it in the `AUTO` folder: quitting the program restarts the computer, 
 
 The program loads from any drive, without help from the Multi-device: a computer that cannot boot with the device in can still load it from a floppy (see [The Atari that will not boot with the device in](#the-atari-that-will-not-boot-with-the-device-in)).
 
-### 2. Launch the Multidevice Test microfirmware
+## 🕹️ Usage
 
-In Booster's web page (the Booster Configurator), find **Multidevice Test** in the apps, download it and launch it.
-
-![The Multidevice Test in Booster's apps](/apps.png)
-
-The device restarts with the test microfirmware and the Atari starts as if no cartridge were there.
-
-### 3. Run the tests
+### Run the tests
 
 Run `MDTEST.TOS` from the desktop.
 
@@ -68,17 +87,17 @@ Each test also has its own key on the menu:
 
 [C] appears once a line test passes, and [I] to [T] once the command channel test passes too: when the port does not carry the data, nothing sent through it can be trusted. After a test its lines stay on the screen; press another test's key, or Space for the menu.
 
-### 4. Save the report
+### 💾 Save the report
 
 **[S]** writes everything the program has shown to the microSD card in the Multi-device, as `MDTEST-REPORT-00.TXT` (then `-01`, `-02`...). It goes through the command channel, so it can be saved once the line test and the command channel test have passed; before that, photograph the screen. The program asks first whether to keep the names of the Wi-Fi networks and Bluetooth devices it heard.
 
-## When something is wrong
+## 🩺 When something is wrong
 
 The program says what it found in the port before anything else:
 
 - **No Multi-device answers**: the device is not in the port, not powered, or not running. Switch the computer off, check the device is fully in, and launch the Multidevice Test from Booster.
 - **Another microfirmware**: launch the Multidevice Test from Booster, then run the program again.
-- **An old Multidevice Test** (v0.0.3): update the microfirmware in Booster (see [Upgrading from v0.0.3](#upgrading-from-v003)).
+- **An old Multidevice Test** (v0.0.3): update the microfirmware in Booster (see *Upgrading from v0.0.3* below).
 - **The microfirmware and the program are from different releases**: the program says which one to update. Use the `MDTEST.TOS` of the same release as the microfirmware.
 
 When a line test fails, the program names the fault: a data line stuck or shorted to another, an address line, a select line, one byte lane, a whole bank not answering, the banks swapped, errors that come and go. Each finding comes with advice.
@@ -107,7 +126,7 @@ The Multi-device can be set up without the Atari (*blind mode*):
 9. Power the Multi-device off and connect it to the Atari. Remove the USB cable, so the Atari powers the device.
 10. Power on the Atari. The Multi-device starts the test microfirmware, the Atari starts as if no cartridge were there, and you can run `MDTEST.TOS` from a floppy.
 
-## Back to Booster
+## ⏏️ Back to Booster
 
 Either:
 
@@ -116,7 +135,7 @@ Either:
 
 Holding SELECT for 10 seconds resets the device to its factory settings.
 
-## Upgrading from v0.0.3
+## ⬆️ Upgrading from v0.0.3
 
 v0.0.3 was a different pair: the program `TESTSCRT.TOS` with its data file `TESTROM.BIN`. Neither works with this microfirmware.
 
@@ -125,7 +144,7 @@ v0.0.3 was a different pair: the program `TESTSCRT.TOS` with its data file `TEST
 
 `MDTEST.TOS` recognises a device still running v0.0.3 and says to update it.
 
-## Building from source
+## 🛠️ Building from source
 
 The microfirmware and the program build together:
 
@@ -144,6 +163,9 @@ You need:
 
 The build fetches its submodules (the Raspberry Pi Pico SDK, pico-extras and FatFs) and pins them to their tested versions. `<APP_UUID>` is the app's identity in Booster; without one, the build uses a development UUID.
 
-## License
+## 📜 License
 
-This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
+The source code is licensed under the [GNU General Public License v3.0](LICENSE).
+
+## 🤝 Contributing
+Made with ❤️ by [SidecarTridge](https://sidecartridge.com)
